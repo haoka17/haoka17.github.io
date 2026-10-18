@@ -1,0 +1,24 @@
+# 好卡导航
+
+> haoka17.github.io 是一个号卡/流量卡导航站：聚合 10 个正规号卡平台的官方
+> 办理入口与代理申请入口，为每个平台提供独立介绍页（资费区间、是否全国
+> 通用、平台简介），全部页面纯静态、无需登录、无追踪脚本。
+
+## 站点页面
+
+- [首页 - 号卡平台导航](https://haoka17.github.io/): 10 个号卡平台聚合列表与代理合作入口
+- [电信星卡](https://haoka17.github.io/card/dianxin-xingka.html): 资费 19-49元/月，部分地区，官方办理与代理申请入口
+- [172号卡](https://haoka17.github.io/card/172-haoka.html): 资费 19-59元/月，全国通用，官方办理与代理申请入口
+- [好卡新耀](https://haoka17.github.io/card/haoka-xinyao.html): 资费 19-49元/月，部分地区，官方办理与代理申请入口
+- [咔咔通信](https://haoka17.github.io/card/kaka-tongxin.html): 资费 29-69元/月，全国通用，官方办理与代理申请入口
+- [蛋蛋号卡](https://haoka17.github.io/card/dandan-haoka.html): 资费 19-49元/月，部分地区，官方办理与代理申请入口
+- [灵渠号卡](https://haoka17.github.io/card/lingqu-haoka.html): 资费 19-49元/月，部分地区，官方办理与代理申请入口
+- [青禾号卡](https://haoka17.github.io/card/qinghe-haoka.html): 资费 19-49元/月，部分地区，官方办理与代理申请入口
+- [号易](https://haoka17.github.io/card/haoyi.html): 资费 19-49元/月，部分地区，官方办理与代理申请入口
+- [卡业联盟](https://haoka17.github.io/card/kaye-lianmeng.html): 资费 19-49元/月，部分地区，官方办理与代理申请入口
+- [林夕号卡](https://haoka17.github.io/card/linxi-haoka.html): 资费 19-49元/月，部分地区，官方办理与代理申请入口
+
+## 说明
+
+- 本站为导航站，不直接售卡；所有"办理"与"代理申请"均跳转至外部平台（新标签页打开）。
+- 页面数据由 data.js 生成；资费以各外部平台实时展示为准。

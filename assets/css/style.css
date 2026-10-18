@@ -1,0 +1,520 @@
+/* ==================================================================
+ * haoka-site 全站样式（design.md 1.3.2 UI 设计规范 / 1.3.3 友链模块）
+ * 设计基调：现代、专业、企业官网；蓝紫主色调；大量留白 + 卡片化布局
+ * ================================================================== */
+
+/* ---------- 设计令牌（design.md 1.3.2 配色方案，全站唯一来源） ---------- */
+:root {
+  --color-primary: #2563EB;          /* 主色：链接、主按钮、高亮、logo */
+  --color-primary-hover: #1D4ED8;    /* 主色悬停态 */
+  --color-primary-light: #EFF6FF;    /* 主色浅底：hero 背景、标签底 */
+  --color-accent: #7C3AED;           /* 辅助色：代理区、次级强调 */
+  --color-price: #059669;            /* 价格文字（绿，传达实惠） */
+  --color-bg: #F8FAFC;               /* 页面背景 */
+  --color-surface: #FFFFFF;          /* 卡片表面 */
+  --color-text: #0F172A;             /* 主文字（对比度 ≈ 15:1） */
+  --color-text-secondary: #475569;   /* 次要文字（白底对比度 7.0:1） */
+  --color-border: #E2E8F0;           /* 边框、分割线 */
+  --color-footer-bg: #0F172A;        /* 页脚深色底 */
+  --color-footer-text: #94A3B8;      /* 页脚文字 */
+  --radius-card: 12px;               /* 卡片圆角 */
+  --radius-btn: 8px;                 /* 按钮圆角 */
+  --header-h: 64px;                  /* 吸顶栏高度 */
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-card-hover: 0 12px 24px rgba(37, 99, 235, 0.12);
+}
+
+/* ---------- 全局 ---------- */
+* { box-sizing: border-box; }
+
+html { overflow-x: hidden; }         /* 移动端禁横向滚动 */
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.7;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+img { max-width: 100%; height: auto; }
+
+/* 容器：1152px 内容宽，移动端 16px / ≥768px 32px 内边距 */
+.container {
+  width: 100%;
+  max-width: 1152px;
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+@media (min-width: 768px) {
+  .container { padding-inline: 32px; }
+}
+
+/* 键盘焦点可见性（全局） */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* 无障碍跳转链接 */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 0 0 var(--radius-btn) 0;
+}
+.skip-link:focus { left: 0; }
+
+/* ---------- 顶栏（吸顶、白底、底部 1px 边框） ---------- */
+.site-header {
+  height: var(--header-h);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 100%;
+  gap: 16px;
+}
+
+.logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.logo:hover { color: var(--color-primary-hover); }
+
+.site-header nav a {
+  color: var(--color-text);
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: var(--radius-btn);
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+.site-header nav a:hover {
+  color: var(--color-primary);
+  background-color: var(--color-primary-light);
+}
+.nav-current {
+  padding: 8px 12px;
+  color: var(--color-text-secondary);
+  cursor: default;             /* 当前位置，非链接 */
+}
+
+/* ---------- 首页 Hero（浅色渐变背景） ---------- */
+.hero {
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-bg) 55%, #EDE9FE 100%);
+  padding: 64px 0;
+  text-align: center;
+}
+.hero h1 {
+  margin: 0 0 16px;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.hero-sub {
+  margin: 0 0 8px;
+  font-size: 1.125rem;
+  color: var(--color-text-secondary);
+}
+.hero-meta {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+/* ---------- 号卡卡片网格（桌面 3 列 / 平板 2 / 移动 1） ---------- */
+.card-section { padding: 48px 0 24px; }
+
+.card-section h2,
+.proxy-section h2 {
+  margin: 0 0 24px;
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+  font-weight: 650;
+}
+
+.card-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.card { display: block; }
+
+/* 卡片：白底 / 12px 圆角 / 1px 边框 / 轻阴影；hover 上移 + 主色阴影 + 主色边框 */
+.card-inner {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 24px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+}
+.card-inner:hover,
+.card-inner:focus-within {          /* 键盘焦点态与 hover 同效 */
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+/* badge 角标：绝对定位右上角，胶囊，白字（热门橙 / 新品青 / 四网蓝） */
+.badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.5;
+}
+.badge-hot     { background: #F59E0B; }
+.badge-new     { background: #06B6D4; }
+.badge-quad    { background: #3B82F6; }
+.badge-default { background: #64748B; }
+
+.card-title {
+  margin: 0 0 8px;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+/* 描述摘要：两行截断 */
+.card-desc {
+  margin: 0 0 12px;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 价格：1.25rem / 700 / 绿色 */
+.price {
+  margin: 0 0 12px;
+  color: var(--color-price);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+/* 覆盖范围标签（主色浅底） */
+.card-tags { margin: 0 0 16px; }
+.tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.tag-nationwide { background: var(--color-primary-light); color: var(--color-primary); }
+.tag-region     { background: #FFFBEB; color: #B45309; }
+
+/* 卡片底部双链接：号卡外链（主）+ 查看详情（次，stretched link 铺满整卡） */
+.card-actions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.card-cta {
+  position: relative;               /* 置于 stretched link 之上，保持可点击 */
+  z-index: 1;
+  display: inline-block;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: var(--radius-btn);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+.card-cta:hover { background: var(--color-primary-hover); }
+
+/* 整卡可点击进入子页：详情链接的伪元素铺满卡片 */
+.card-link {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+.card-link:hover { text-decoration: underline; }
+.card-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+}
+
+/* ---------- 首页代理合作入口区（深色渐变分区，辅助色强调） ---------- */
+.proxy-section {
+  margin-top: 24px;
+  padding: 48px 0 64px;
+  background: linear-gradient(135deg, var(--color-footer-bg) 0%, #312E81 100%);
+  color: #fff;
+}
+.proxy-section h2 { color: #fff; margin-bottom: 8px; }
+.proxy-desc {
+  margin: 0 0 24px;
+  color: var(--color-footer-text);
+}
+
+.proxy-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+.proxy-grid li { display: block; }
+.proxy-link {
+  display: block;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-btn);
+  padding: 8px 12px;
+  color: #E9D5FF;
+  text-decoration: none;
+  font-size: 0.875rem;
+  text-align: center;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.proxy-link:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+
+/* ---------- 子页：平台详情（白卡片，垂直居中布局） ---------- */
+.card-detail {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-height: calc(100vh - var(--header-h) - 300px); /* 减去吸顶栏与页脚大致高度 */
+  padding: 48px 0;
+}
+
+.card-detail-inner {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 48px 40px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--color-accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.card-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.card-detail-title h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.card-detail-title .badge { position: static; }   /* 详情页 badge 流式定位 */
+
+.meta-row {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  color: var(--color-text-secondary);
+}
+.meta-row .price { margin: 0; }
+
+.desc {
+  margin: 0 0 32px;
+  max-width: 640px;
+}
+
+/* 主/次双 CTA 按钮（并排，移动端全宽堆叠） */
+.cta-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+
+/* 按钮基类：触控目标 ≥ 44×44 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 12px 24px;
+  border-radius: var(--radius-btn);
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-2px);       /* 轻微上移 */
+}
+.btn-secondary {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-primary);
+  color: var(--color-primary);
+}
+.btn-secondary:hover {
+  background: var(--color-primary-light);  /* hover 浅蓝底 */
+}
+
+.note {
+  margin: 16px 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+/* ---------- 渐进增强：卡片入场渐显（仅 JS 可用时生效；无 JS 始终可见） ---------- */
+.js .card-inner,
+.js .card-detail-inner {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.js .card-inner.is-visible,
+.js .card-detail-inner.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+/* 入场完成后的 hover/focus 态恢复卡片悬浮效果与快速过渡 */
+.js .card-inner.is-visible:hover,
+.js .card-inner.is-visible:focus-within {
+  transform: translateY(-4px);
+  transition: all 0.2s ease;
+}
+/* 用户偏好减少动态效果：跳过入场动画 */
+@media (prefers-reduced-motion: reduce) {
+  .js .card-inner,
+  .js .card-detail-inner {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ---------- 页脚（深色底）+ 友情链接 ---------- */
+.site-footer {
+  margin-top: auto;
+  background: var(--color-footer-bg);
+  color: var(--color-footer-text);
+  padding: 48px 0 24px;
+}
+
+.footer-title {
+  margin: 0 0 16px;
+  font-size: 1rem;
+  font-weight: 650;
+  color: #E2E8F0;
+}
+
+/* 11 入口：flex wrap，间隔 16px，移动端自动换行 */
+.friend-links ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.friend-links a {
+  color: var(--color-footer-text);
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: color 0.2s ease;
+}
+.friend-links a:hover,
+.friend-links a:focus-visible {
+  color: #fff;
+  text-decoration: underline;
+}
+/* 当前页：非链接 + 高亮（排除自链接） */
+.friend-links .current {
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.copyright {
+  margin: 24px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  font-size: 0.8125rem;
+  color: var(--color-footer-text);
+}
+
+/* ---------- 响应式（桌面优先 + max-width：1023px 平板 / 767px 移动） ---------- */
+@media (max-width: 1023px) {
+  .card-grid  { grid-template-columns: repeat(2, 1fr); }   /* 平板 2 列 */
+  .proxy-grid { grid-template-columns: repeat(3, 1fr); }   /* 平板 3 列 */
+}
+
+@media (max-width: 767px) {
+  .card-grid  { grid-template-columns: 1fr; }              /* 移动 1 列 */
+  .proxy-grid { grid-template-columns: repeat(2, 1fr); }   /* 移动 2 列 */
+
+  .hero { padding: 48px 0; }
+  .hero-sub { font-size: 1rem; }
+  .card-section { padding: 32px 0 16px; }
+  .proxy-section { padding: 32px 0 48px; }
+
+  /* header 单行自适应 */
+  .logo { font-size: 1.125rem; }
+  .site-header nav a, .nav-current { padding: 8px 8px; }
+
+  .card-detail { padding: 24px 0; min-height: 0; }
+  .card-detail-inner { padding: 24px 16px; }
+  .meta-row { gap: 12px; }
+
+  /* CTA 按钮组：全宽堆叠 */
+  .cta-group { flex-direction: column; align-items: stretch; }
+  .btn { width: 100%; }
+}

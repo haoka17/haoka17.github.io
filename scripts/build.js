@@ -1,0 +1,1160 @@
+#!/usr/bin/env node
+/**
+ * haoka-site 构建脚本（Node.js ≥ 18，零第三方依赖，仅 node: 内置模块）
+ *
+ * 用法：
+ *   node scripts/build.js           # 全量构建站点产物
+ *   node scripts/build.js --verify  # 对已生成产物执行自检（不重新构建）
+ *
+ * 流程（对应 design.md 1.2.5 数据流）：
+ *   require data.js → validateData 校验（E1~E6 失败则零产物）
+ *   → toCardPairs 索引配对 → 全部产物先在内存渲染 → 校验断言 → 统一写盘。
+ */
+
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+/* ================================================================== */
+/* 常量与类型契约                                                      */
+/* ================================================================== */
+
+/** 仓库根（= 站点根，GitHub Pages 用户站点，根绝对路径成立） */
+const ROOT = path.resolve(__dirname, '..');
+/** 唯一数据源 */
+const DATA_PATH = path.join(ROOT, 'data.js');
+/** 子页产物目录 */
+const CARD_DIR = path.join(ROOT, 'card');
+
+/** 站点级常量（唯一配置来源） */
+const SITE = {
+  baseUrl: 'https://haoka17.github.io',
+  siteName: '好卡导航',
+  ogImage: '/assets/img/og-default.png',
+};
+
+/** 平台名 → 子页 slug 内置映射（现有 10 个平台固化，design.md 4.2） */
+const SLUG_MAP = {
+  '电信星卡': 'dianxin-xingka',
+  '172号卡': '172-haoka',
+  '好卡新耀': 'haoka-xinyao',
+  '咔咔通信': 'kaka-tongxin',
+  '蛋蛋号卡': 'dandan-haoka',
+  '灵渠号卡': 'lingqu-haoka',
+  '青禾号卡': 'qinghe-haoka',
+  '号易': 'haoyi',
+  '卡业联盟': 'kaye-lianmeng',
+  '林夕号卡': 'linxi-haoka',
+};
+
+/** 首页在友情链接中的标识 slug（保留名，号卡 slug 不得占用） */
+const HOME_SLUG = 'index';
+/** slug 保留名列表 */
+const RESERVED_SLUGS = [HOME_SLUG];
+
+/** badge 文案 → CSS 修饰类（design.md 1.3.2 badge 三色） */
+const BADGE_CLASS = { '热门': 'hot', '新品': 'new', '四网': 'quad' };
+
+/** 子页 meta description 中 description 的截取长度（design.md 1.3.5） */
+const DESC_SLICE = 70;
+/** meta title / description 最大长度 */
+const META_MAX_LENGTH = 160;
+
+/**
+ * 号卡平台条目（data.js 导出数组 list 的元素）
+ * @typedef {Object} CardItem
+ * @property {string}  name         平台名，如 "电信星卡"（必填，非空）
+ * @property {string}  url          号卡平台官方/办理链接，http(s) 绝对 URL（必填）
+ * @property {string}  description  平台简介，50~200 字符（必填，非空）
+ * @property {string}  priceRange   资费区间，如 "19-49元/月"（必填，非空）
+ * @property {boolean} [nationwide] 是否全国通用（可选；缺省时不渲染覆盖范围标签）
+ * @property {string}  [badge]      角标，如 "四网" | "热门" | "新品"（可选；缺省不渲染）
+ * @property {string}  [slug]       子页 slug 覆盖值（可选；缺省查 SLUG_MAP，仍未命中报错 E6）
+ */
+
+/**
+ * 代理条目（data.js 导出数组 proxyList 的元素；与 list 按索引一一对应）
+ * @typedef {Object} ProxyItem
+ * @property {string} name  代理入口名，约定为 "{平台名}代理"（必填，非空）
+ * @property {string} url   代理申请链接，http(s) 绝对 URL（必填）
+ */
+
+/**
+ * 配对 + 派生后的中间产物（渲染层唯一数据来源）
+ * @typedef {Object} CardPair
+ * @property {CardItem}  card        list[i] 原始条目
+ * @property {ProxyItem} proxy       proxyList[i] 原始条目（索引配对）
+ * @property {string}    slug        经 slugOf() 派生：条目 slug > SLUG_MAP
+ * @property {string}    pageUrl     `${SITE.baseUrl}/card/${slug}.html`
+ * @property {string}    title       子页 <title>
+ * @property {string}    description 子页 meta description（70 字截取规则）
+ * @property {{low:number, high:number} | null} price parsePriceRange() 派生，null 时 JSON-LD 省略 offers
+ */
+
+/* ================================================================== */
+/* 工具函数                                                            */
+/* ================================================================== */
+
+/**
+ * HTML 转义（文本与属性上下文通用）：& < > " ' 。
+ * 保证 URL 含 %、&、# 等特殊字符时属性输出合法、不破坏 DOM。
+ * @param {unknown} value
+ * @returns {string}
+ */
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** 当前日期（YYYY-MM-DD，供 sitemap lastmod 使用） */
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** 是否为合法的 http/https 绝对 URL */
+function isValidHttpUrl(value) {
+  if (typeof value !== 'string' || value === '') return false;
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+}
+
+/* ================================================================== */
+/* ① 校验层（design.md 1.3.7：E1~E10，fail-fast + 全量收集）           */
+/* ================================================================== */
+
+/**
+ * 派生子页 slug：条目 slug 字段 > SLUG_MAP > null（E6 由调用方收集）。
+ * @param {CardItem} item
+ * @param {number}   index  list 中的索引（仅用于错误信息）
+ * @param {{errors: string[]}=} issues 可选，收集 E6 错误
+ * @returns {string | null}
+ */
+function slugOf(item, index, issues) {
+  if (item && typeof item === 'object') {
+    if (typeof item.slug === 'string' && item.slug.trim() !== '') {
+      return item.slug.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(SLUG_MAP, item.name)) {
+      return SLUG_MAP[item.name];
+    }
+  }
+  if (issues) {
+    const label = item && item.name ? item.name : '未知平台';
+    issues.errors.push(
+      `错误: list[${index}](${label}) 未提供 slug，且不在内置映射表中；` +
+      '请在 data.js 该条目增加 slug 字段（如 "xin-pingtai"）'
+    );
+  }
+  return null;
+}
+
+/**
+ * 校验 data.js 数据契约（E1~E10）。
+ * E1~E6 为数据契约级错误（构建阻断）；E7~E10 为数据质量警告（不阻断）。
+ * @param {CardItem[]} list
+ * @param {ProxyItem[]} proxyList
+ * @returns {{errors: string[], warnings: string[]}}
+ */
+function validateData(list, proxyList) {
+  const errors = [];
+  const warnings = [];
+
+  if (!Array.isArray(list) || !Array.isArray(proxyList)) {
+    errors.push('错误: list 与 proxyList 必须均为数组');
+    return { errors, warnings };
+  }
+
+  // E2：空数组
+  if (list.length === 0) errors.push('错误: list 为空数组');
+  if (proxyList.length === 0) errors.push('错误: proxyList 为空数组');
+
+  // E1：长度不一致（仍继续逐条字段校验，保证一次性输出全部问题）
+  if (list.length !== proxyList.length) {
+    errors.push(
+      `错误: list(${list.length}) 与 proxyList(${proxyList.length}) 长度不一致，无法按索引一一配对`
+    );
+  }
+
+  // E3：必填字段缺失/为空（错误信息含数组名、索引、平台名、字段名）
+  checkRequiredFields('list', list, ['name', 'url', 'description', 'priceRange'], errors);
+  checkRequiredFields('proxyList', proxyList, ['name', 'url'], errors);
+
+  // E4：url 非法（new URL() 抛错或协议非 http/https，回显原值）
+  checkUrls('list', list, errors);
+  checkUrls('proxyList', proxyList, errors);
+
+  // E5/E6：slug 派生、冲突与保留名检测（仅依赖 list）
+  checkSlugs(list, errors);
+
+  // E7（软）：代理名不符 "{平台名}代理" 约定 → 仅警告
+  if (list.length === proxyList.length) {
+    for (let i = 0; i < list.length; i += 1) {
+      const card = list[i];
+      const proxy = proxyList[i];
+      if (card && proxy && card.name && proxy.name && proxy.name !== `${card.name}代理`) {
+        warnings.push(
+          `警告: 第 ${i} 对命名不符约定: list=${card.name} / proxy=${proxy.name}，请人工确认配对关系`
+        );
+      }
+    }
+  }
+
+  // E9（软）：priceRange 无法解析出 low/high → 警告（JSON-LD 省略 offers）
+  for (let i = 0; i < list.length; i += 1) {
+    const item = list[i];
+    if (item && typeof item === 'object' && typeof item.priceRange === 'string' && item.priceRange !== '') {
+      if (parsePriceRange(item.priceRange) === null) {
+        warnings.push(
+          `警告: list[${i}](${item.name || '未知'}).priceRange "${item.priceRange}" 无法解析出价格区间，JSON-LD 将省略 offers 节点`
+        );
+      }
+    }
+  }
+
+  // E10（软）：description 超长 → 警告（首页卡片由 CSS 截断）
+  for (let i = 0; i < list.length; i += 1) {
+    const item = list[i];
+    if (item && typeof item === 'object' && typeof item.description === 'string'
+      && item.description.length > 200) {
+      warnings.push(
+        `警告: list[${i}](${item.name || '未知'}).description 超长（${item.description.length} 字符 > 200），首页卡片摘要将由 CSS 截断`
+      );
+    }
+  }
+
+  // E8（badge/nationwide 缺失）为降级路径，不产生错误或警告
+  return { errors, warnings };
+}
+
+/** E3：逐条检查必填字符串字段 */
+function checkRequiredFields(arrName, arr, fields, errors) {
+  for (let i = 0; i < arr.length; i += 1) {
+    const item = arr[i];
+    const label = `${arrName}[${i}](${item && item.name ? item.name : '未知'})`;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      errors.push(`错误: ${label} 不是合法对象`);
+      continue;
+    }
+    for (const field of fields) {
+      const value = item[field];
+      if (typeof value !== 'string' || value.trim() === '') {
+        errors.push(`错误: ${label}.${field} 缺失或为空`);
+      }
+    }
+  }
+}
+
+/** E4：URL 合法性检查（仅支持 http/https） */
+function checkUrls(arrName, arr, errors) {
+  for (let i = 0; i < arr.length; i += 1) {
+    const item = arr[i];
+    if (!item || typeof item !== 'object' || typeof item.url !== 'string' || item.url.trim() === '') {
+      continue; // E3 已覆盖
+    }
+    if (!isValidHttpUrl(item.url)) {
+      errors.push(
+        `错误: ${arrName}[${i}](${item.name || '未知'}).url 非法: "${item.url}"（仅支持 http/https）`
+      );
+    }
+  }
+}
+
+/** E5/E6：slug 派生、保留名与冲突检测 */
+function checkSlugs(list, errors) {
+  /** @type {Map<string, {index: number, name: string}>} */
+  const seen = new Map();
+  for (let i = 0; i < list.length; i += 1) {
+    const item = list[i];
+    if (!item || typeof item !== 'object') continue;
+    const slug = slugOf(item, i, { errors });
+    if (slug === null) continue; // E6 已收集
+    if (RESERVED_SLUGS.includes(slug)) {
+      errors.push(
+        `错误: slug 冲突: "${slug}" 来自 list[${i}](${item.name || '未知'})，与保留名冲突，请更换 slug`
+      );
+      continue;
+    }
+    if (seen.has(slug)) {
+      const prev = seen.get(slug);
+      errors.push(
+        `错误: slug 冲突: "${slug}" 同时来自 list[${prev.index}](${prev.name}) 与 list[${i}](${item.name || '未知'})`
+      );
+    } else {
+      seen.set(slug, { index: i, name: item.name || '未知' });
+    }
+  }
+}
+
+/* ================================================================== */
+/* ② 配对与派生层                                                      */
+/* ================================================================== */
+
+/**
+ * 解析 priceRange 字符串为价格区间。
+ * @param {string} priceRange 形如 "19-49元/月"
+ * @returns {{low: number, high: number} | null} 解析失败返回 null（E9 降级）
+ */
+function parsePriceRange(priceRange) {
+  if (typeof priceRange !== 'string') return null;
+  const match = priceRange.match(/(\d+(?:\.\d+)?)\s*[-–~至]\s*(\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const low = Number(match[1]);
+  const high = Number(match[2]);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || low > high) return null;
+  return { low, high };
+}
+
+/**
+ * 按数组索引配对并派生页面元数据（唯一稳定配对机制 = 索引）。
+ * 调用前提：validateData 已通过（slug 必然可派生）。
+ * @param {CardItem[]} list
+ * @param {ProxyItem[]} proxyList
+ * @returns {CardPair[]}
+ */
+function toCardPairs(list, proxyList) {
+  return list.map((card, i) => {
+    const proxy = proxyList[i];
+    const slug = slugOf(card, i) || `card-${i + 1}`; // 防御兜底，正常流程不触发
+    const price = parsePriceRange(card.priceRange);
+    const pageUrl = `${SITE.baseUrl}/card/${slug}.html`;
+    return {
+      card,
+      proxy,
+      slug,
+      pageUrl,
+      price,
+      title: `${card.name}流量卡怎么样？${card.priceRange}资费详情与办理入口 - ${SITE.siteName}`,
+      description:
+        `${card.name}流量卡资费 ${card.priceRange}，` +
+        `${card.description.slice(0, DESC_SLICE)}。提供官方办理入口与代理申请通道。`,
+    };
+  });
+}
+
+/** 首页元数据（title/description/canonical，design.md 1.3.5 模板） */
+function indexMeta(pairs) {
+  const n = pairs.length;
+  return {
+    title: `${SITE.siteName} - 精选正规流量卡/号卡平台导航与代理入口`,
+    description:
+      `聚合 ${n} 个正规号卡平台官方办理入口与代理申请通道，` +
+      '覆盖电信星卡、172号卡等热门流量卡品牌，附资费区间与适用地区说明，一站比选直达办理。',
+    canonicalPath: `${SITE.baseUrl}/`,
+  };
+}
+
+/* ================================================================== */
+/* ③ 渲染层（模板函数，无模板引擎）                                    */
+/* ================================================================== */
+
+/** 通用布局骨架头部导航：首页在首页本身渲染为当前位置 span，其余为站内链接 */
+function renderHeaderNav(currentSlug) {
+  const homeItem = currentSlug === HOME_SLUG
+    ? '<span aria-current="page" class="nav-current">首页</span>'
+    : '<a href="/">首页</a>';
+  return `<nav aria-label="主导航">${homeItem}</nav>`;
+}
+
+/**
+ * 渲染页脚友情链接导航（design.md 1.3.3）。
+ * 11 入口 = 首页（/）+ 全部子页（/card/{slug}.html），全部来自 CardPair[]。
+ * 当前页渲染为 <span aria-current="page" class="current">（排除自链接），
+ * 其余为同窗口站内链接。
+ * @param {string} currentSlug HOME_SLUG 或子页 slug
+ * @param {CardPair[]} pairs
+ * @returns {string}
+ */
+function renderFooterNav(currentSlug, pairs) {
+  const items = [];
+  items.push(currentSlug === HOME_SLUG
+    ? '<li><span aria-current="page" class="current">首页</span></li>'
+    : '<li><a href="/">首页</a></li>');
+  for (const pair of pairs) {
+    items.push(pair.slug === currentSlug
+      ? `<li><span aria-current="page" class="current">${escapeHtml(pair.card.name)}</span></li>`
+      : `<li><a href="/card/${escapeHtml(pair.slug)}.html">${escapeHtml(pair.card.name)}</a></li>`);
+  }
+  return [
+    '<nav class="friend-links" aria-label="友情链接">',
+    '  <h2 class="footer-title">友情链接</h2>',
+    '  <ul>',
+    ...items.map((item) => `    ${item}`),
+    '  </ul>',
+    '</nav>',
+  ].join('\n');
+}
+
+/**
+ * 通用布局骨架：head（SEO/OG/JSON-LD 全集）+ header + main + footer。
+ * @param {{title: string, description: string, canonicalPath: string,
+ *          jsonLd: object, mainHtml: string, currentSlug: string,
+ *          pairs: CardPair[]}} page
+ * @returns {string} 完整 HTML 文档
+ */
+function renderLayout(page) {
+  const { title, description, canonicalPath, jsonLd, mainHtml, currentSlug, pairs } = page;
+  const year = new Date().getFullYear();
+  const jsonLdText = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(description)}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="${escapeHtml(canonicalPath)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${SITE.siteName}">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:url" content="${escapeHtml(canonicalPath)}">
+<meta property="og:image" content="${escapeHtml(SITE.baseUrl + SITE.ogImage)}">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/style.css">
+<script type="application/ld+json">${jsonLdText}</script>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到主要内容</a>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="logo" href="/">⬡ ${SITE.siteName}</a>
+    ${renderHeaderNav(currentSlug)}
+  </div>
+</header>
+<main id="main">
+${mainHtml}
+</main>
+<footer class="site-footer">
+  <div class="container">
+${renderFooterNav(currentSlug, pairs)}
+    <p class="copyright">© <span data-year>${year}</span> ${SITE.siteName} · 免责声明</p>
+  </div>
+</footer>
+<script src="/assets/js/main.js" defer></script>
+</body>
+</html>
+`;
+}
+
+/** badge 角标（E8：缺失时不渲染） */
+function renderBadge(badge) {
+  if (!badge) return '';
+  const cls = BADGE_CLASS[badge] || 'default';
+  return `<span class="badge badge-${cls}">${escapeHtml(badge)}</span>`;
+}
+
+/** 覆盖范围标签（E8：nationwide 缺失时不渲染） */
+function renderAreaTag(nationwide) {
+  if (typeof nationwide !== 'boolean') return '';
+  return nationwide
+    ? '<span class="tag tag-nationwide">全国通用</span>'
+    : '<span class="tag tag-region">部分地区</span>';
+}
+
+/**
+ * 渲染首页 main 区：hero + 号卡卡片网格 + 代理合作入口区。
+ * @param {CardPair[]} pairs
+ * @returns {string}
+ */
+function renderIndexMain(pairs) {
+  const n = pairs.length;
+  const lows = pairs.map((p) => (p.price ? p.price.low : null)).filter((v) => typeof v === 'number');
+  const priceSegment = lows.length > 0 ? `每月低至 ${Math.min(...lows)} 元` : '资费透明';
+
+  const cards = pairs.map((pair) => {
+    const card = pair.card;
+    const badge = renderBadge(card.badge);
+    const areaTag = renderAreaTag(card.nationwide);
+    return `<li class="card">
+  <article class="card-inner">
+    ${badge}
+    <h3 class="card-title">${escapeHtml(card.name)}</h3>
+    <p class="card-desc">${escapeHtml(card.description)}</p>
+    <p class="price">${escapeHtml(card.priceRange)}</p>
+    ${areaTag ? `    <div class="card-tags">${areaTag}</div>\n` : ''}    <div class="card-actions">
+      <a class="card-cta" href="${escapeHtml(card.url)}" target="_blank" rel="noopener noreferrer">前往${escapeHtml(card.name)} ↗</a>
+      <a class="card-link" href="/card/${escapeHtml(pair.slug)}.html">查看详情 →</a>
+    </div>
+  </article>
+</li>`;
+  }).join('\n');
+
+  const proxies = pairs.map((pair) =>
+    `      <li><a class="proxy-link" href="${escapeHtml(pair.proxy.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(pair.proxy.name)} ↗</a></li>`
+  ).join('\n');
+
+  return `<section class="hero">
+  <div class="container">
+    <h1>精选正规号卡平台导航</h1>
+    <p class="hero-sub">聚合 ${n} 大正规号卡平台官方办理入口，资费透明，另提供各平台代理申请通道</p>
+    <p class="hero-meta">覆盖 ${n} 个平台 · ${priceSegment} · 全国可办</p>
+  </div>
+</section>
+<section class="card-section" aria-labelledby="card-section-title">
+  <div class="container">
+    <h2 id="card-section-title">号卡平台</h2>
+    <ul class="card-grid">
+      ${cards}
+    </ul>
+  </div>
+</section>
+<section class="proxy-section" aria-labelledby="proxy-section-title">
+  <div class="container">
+    <h2 id="proxy-section-title">代理合作入口</h2>
+    <p class="proxy-desc">有意成为号卡代理商？直达各平台代理申请通道：</p>
+    <ul class="proxy-grid">
+${proxies}
+    </ul>
+  </div>
+</section>`;
+}
+
+/**
+ * 渲染子页 main 区：平台详情卡 + 双 CTA 按钮。
+ * @param {CardPair} pair
+ * @returns {string}
+ */
+function renderCardMain(pair) {
+  const { card, proxy } = pair;
+  const badge = renderBadge(card.badge);
+  const areaItem = typeof card.nationwide === 'boolean'
+    ? `\n      <li>📍 ${card.nationwide ? '全国通用' : '部分地区'}</li>`
+    : '';
+  return `<section class="card-detail">
+  <div class="container card-detail-inner">
+    <p class="eyebrow">号卡平台</p>
+    <div class="card-detail-title">
+      <h1>${escapeHtml(card.name)}</h1>
+      ${badge}
+    </div>
+    <ul class="meta-row">
+      <li>💳 资费：<strong class="price">${escapeHtml(card.priceRange)}</strong></li>${areaItem}
+    </ul>
+    <p class="desc">${escapeHtml(card.description)}</p>
+    <div class="cta-group">
+      <a class="btn btn-primary" href="${escapeHtml(card.url)}" target="_blank" rel="noopener noreferrer">前往${escapeHtml(card.name)}官方平台 ↗</a>
+      <a class="btn btn-secondary" href="${escapeHtml(proxy.url)}" target="_blank" rel="noopener noreferrer">申请成为${escapeHtml(card.name)}代理 ↗</a>
+    </div>
+    <p class="note">跳转至外部平台，本站不直接售卡</p>
+  </div>
+</section>`;
+}
+
+/* ================================================================== */
+/* ③' SEO 元数据与 JSON-LD（design.md 1.3.5 / 1.3.6）                  */
+/* ================================================================== */
+
+/** 首页 JSON-LD：WebSite + ItemList（@graph 联合发布） */
+function indexJsonLd(pairs) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebSite',
+        '@id': `${SITE.baseUrl}/#website`,
+        name: SITE.siteName,
+        url: `${SITE.baseUrl}/`,
+        description: `聚合 ${pairs.length} 个正规号卡平台官方办理入口与代理申请通道`,
+        inLanguage: 'zh-CN',
+      },
+      {
+        '@type': 'ItemList',
+        '@id': `${SITE.baseUrl}/#cardlist`,
+        name: '号卡平台列表',
+        itemListOrder: 'https://schema.org/ItemListOrderAscending',
+        numberOfItems: pairs.length,
+        itemListElement: pairs.map((pair, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: pair.card.name,
+          url: pair.pageUrl,
+        })),
+      },
+    ],
+  };
+}
+
+/** 子页 JSON-LD：WebPage（含 Product/AggregateOffer）+ 两个外链 ItemList */
+function cardJsonLd(pair) {
+  const suffix = ` - ${SITE.siteName}`;
+  const pageTitle = pair.title.endsWith(suffix)
+    ? pair.title.slice(0, -suffix.length)
+    : pair.title;
+  /** @type {object} */
+  const about = { '@type': 'Product', name: `${pair.card.name}流量卡` };
+  if (pair.price) {
+    about.offers = {
+      '@type': 'AggregateOffer',
+      priceCurrency: 'CNY',
+      lowPrice: pair.price.low,
+      highPrice: pair.price.high,
+      offerCount: 1,
+    };
+  }
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebPage',
+        '@id': `${pair.pageUrl}#webpage`,
+        url: pair.pageUrl,
+        name: pageTitle,
+        description: pair.description,
+        inLanguage: 'zh-CN',
+        isPartOf: { '@id': `${SITE.baseUrl}/#website` },
+        about,
+      },
+      {
+        '@type': 'ItemList',
+        name: `${pair.card.name}外部入口`,
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: `前往${pair.card.name}官方平台`, url: pair.card.url },
+          { '@type': 'ListItem', position: 2, name: `申请成为${pair.card.name}代理`, url: pair.proxy.url },
+        ],
+      },
+    ],
+  };
+}
+
+/* ================================================================== */
+/* ③'' 站点级产物（sitemap / robots / llms.txt，design.md 1.3.5 / 1.3.6）*/
+/* ================================================================== */
+
+/**
+ * 生成 sitemap.xml：首页 priority 1.0 + 子页 priority 0.8，顺序与 data.js 一致。
+ * @param {CardPair[]} pairs
+ * @param {string=} dateStr lastmod 日期（YYYY-MM-DD）
+ * @returns {string}
+ */
+function renderSitemap(pairs, dateStr = today()) {
+  const entries = [
+    { loc: `${SITE.baseUrl}/`, priority: '1.0' },
+    ...pairs.map((pair) => ({ loc: pair.pageUrl, priority: '0.8' })),
+  ];
+  const urlBlocks = entries.map((entry) => `  <url>
+    <loc>${entry.loc}</loc>
+    <lastmod>${dateStr}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>${entry.priority}</priority>
+  </url>`);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urlBlocks.join('\n')}
+</urlset>
+`;
+}
+
+/** 生成 robots.txt（固定文案：允许全站 + sitemap 声明） */
+function renderRobots() {
+  return `User-agent: *
+Allow: /
+
+Sitemap: ${SITE.baseUrl}/sitemap.xml
+`;
+}
+
+/**
+ * 生成 llms.txt（AI 爬虫站点说明，遵循 llms.txt 社区规范）：
+ * H1 站名 → 引用块摘要 → 站点页面（11 行链接清单）→ 说明（边界声明）。
+ * @param {CardPair[]} pairs
+ * @returns {string}
+ */
+function renderLlmsTxt(pairs) {
+  const n = pairs.length;
+  const lines = [];
+  lines.push(`# ${SITE.siteName}`, '');
+  lines.push(
+    `> haoka17.github.io 是一个号卡/流量卡导航站：聚合 ${n} 个正规号卡平台的官方`,
+    '> 办理入口与代理申请入口，为每个平台提供独立介绍页（资费区间、是否全国',
+    '> 通用、平台简介），全部页面纯静态、无需登录、无追踪脚本。',
+    '',
+  );
+  lines.push('## 站点页面', '');
+  lines.push(`- [首页 - 号卡平台导航](${SITE.baseUrl}/): ${n} 个号卡平台聚合列表与代理合作入口`);
+  for (const pair of pairs) {
+    const card = pair.card;
+    const segments = [`资费 ${card.priceRange}`];
+    if (typeof card.nationwide === 'boolean') {
+      segments.push(card.nationwide ? '全国通用' : '部分地区');
+    }
+    segments.push('官方办理与代理申请入口');
+    lines.push(`- [${card.name}](${pair.pageUrl}): ${segments.join('，')}`);
+  }
+  lines.push('', '## 说明', '');
+  lines.push('- 本站为导航站，不直接售卡；所有"办理"与"代理申请"均跳转至外部平台（新标签页打开）。');
+  lines.push('- 页面数据由 data.js 生成；资费以各外部平台实时展示为准。');
+  return `${lines.join('\n')}\n`;
+}
+
+/* ================================================================== */
+/* ④ 写盘前断言（E12 原子性保障的一部分）                              */
+/* ================================================================== */
+
+/**
+ * 断言页面中全部 http(s) 外链均含 target="_blank" rel="noopener noreferrer"，
+ * 且不存在 javascript: 链接。
+ * @param {string} pageName 页面标识（用于错误信息）
+ * @param {string} html 页面 HTML
+ * @param {string[]} errors 收集错误
+ */
+function assertExternalLinks(pageName, html, errors) {
+  const anchorRe = /<a\s[^>]*>/g;
+  let match;
+  while ((match = anchorRe.exec(html)) !== null) {
+    const tag = match[0];
+    const hrefMatch = tag.match(/href="([^"]*)"/);
+    if (!hrefMatch) continue;
+    const href = hrefMatch[1];
+    if (/^javascript:/i.test(href)) {
+      errors.push(`错误: ${pageName} 含 javascript: 链接: ${href}`);
+      continue;
+    }
+    if (/^https?:\/\//i.test(href)) {
+      if (!tag.includes('target="_blank"')) {
+        errors.push(`错误: ${pageName} 外链缺少 target="_blank": ${href}`);
+      }
+      if (!/rel="[^"]*\bnoopener\b[^"]*"/.test(tag) || !/rel="[^"]*\bnoreferrer\b[^"]*"/.test(tag)) {
+        errors.push(`错误: ${pageName} 外链缺少 rel="noopener noreferrer": ${href}`);
+      }
+    }
+  }
+}
+
+/**
+ * 断言全部页面 title/description 两两唯一且长度合规（FR-19）。
+ * @param {{page: string, title: string, description: string}[]} metas
+ * @param {string[]} errors
+ */
+function assertMetaUniqueness(metas, errors) {
+  /** @type {Map<string, string>} */
+  const titles = new Map();
+  /** @type {Map<string, string>} */
+  const descriptions = new Map();
+  for (const meta of metas) {
+    if (titles.has(meta.title)) {
+      errors.push(`错误: 页面 title 重复: "${meta.title}"（${titles.get(meta.title)} 与 ${meta.page}）`);
+    } else {
+      titles.set(meta.title, meta.page);
+    }
+    if (descriptions.has(meta.description)) {
+      errors.push(`错误: 页面 description 重复: "${meta.description.slice(0, 30)}…"（${descriptions.get(meta.description)} 与 ${meta.page}）`);
+    } else {
+      descriptions.set(meta.description, meta.page);
+    }
+    if (meta.title.length > META_MAX_LENGTH) {
+      errors.push(`错误: ${meta.page} title 超过 ${META_MAX_LENGTH} 字符（当前 ${meta.title.length}）`);
+    }
+    if (meta.description.length > META_MAX_LENGTH) {
+      errors.push(`错误: ${meta.page} description 超过 ${META_MAX_LENGTH} 字符（当前 ${meta.description.length}）`);
+    }
+  }
+}
+
+/* ================================================================== */
+/* ⑤ 写入层（先内存渲染，后统一写盘；幂等）                            */
+/* ================================================================== */
+
+/**
+ * 清理 card/ 目录中不属于本次产物集合的文件（删除号卡对后旧子页自动消失）。
+ * @param {string[]} keepNames 本次构建应保留的子页文件名
+ */
+function cleanCardDir(keepNames) {
+  if (!fs.existsSync(CARD_DIR)) return;
+  for (const name of fs.readdirSync(CARD_DIR)) {
+    if (keepNames.includes(name)) continue;
+    const abs = path.join(CARD_DIR, name);
+    fs.rmSync(abs, { recursive: true, force: true });
+  }
+}
+
+/**
+ * 统一写盘：内容未变化的文件跳过写入（幂等、减少 git diff 噪音）。
+ * @param {{relPath: string, content: string}[]} artifacts
+ * @returns {{written: number, skipped: number, bytes: number}}
+ */
+function writeAll(artifacts) {
+  cleanCardDir(artifacts
+    .filter((a) => a.relPath.startsWith('card/'))
+    .map((a) => a.relPath.slice('card/'.length)));
+
+  let written = 0;
+  let skipped = 0;
+  let bytes = 0;
+  for (const artifact of artifacts) {
+    const abs = path.join(ROOT, artifact.relPath);
+    const contentBuf = Buffer.from(artifact.content, 'utf8');
+    bytes += contentBuf.length;
+    if (fs.existsSync(abs)) {
+      const existing = fs.readFileSync(abs);
+      if (existing.equals(contentBuf)) {
+        skipped += 1;
+        continue;
+      }
+    }
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, contentBuf);
+    written += 1;
+  }
+  return { written, skipped, bytes };
+}
+
+/* ================================================================== */
+/* 主流程                                                              */
+/* ================================================================== */
+
+/** 加载并基础检查 data.js */
+function loadData() {
+  let data;
+  try {
+    // eslint-disable-next-line import/no-dynamic-require
+    data = require(DATA_PATH);
+  } catch (err) {
+    console.error(`错误: 无法加载 data.js: ${err.message}`);
+    process.exit(1);
+  }
+  if (!data || !Array.isArray(data.list) || !Array.isArray(data.proxyList)) {
+    console.error('错误: data.js 必须导出 { list, proxyList } 且两者均为数组');
+    process.exit(1);
+  }
+  return data;
+}
+
+/**
+ * 构建主流程：加载 → 校验（零产物）→ 配对 → 内存渲染 → 断言 → 统一写盘 → 摘要。
+ */
+function main() {
+  const args = process.argv.slice(2);
+  if (args.includes('--verify')) {
+    verifyArtifacts();
+    return;
+  }
+
+  const { list, proxyList } = loadData();
+  const { errors, warnings } = validateData(list, proxyList);
+  for (const warning of warnings) console.error(warning);
+  if (errors.length > 0) {
+    for (const error of errors) console.error(error);
+    console.error(`错误: 共 ${errors.length} 个数据错误，构建中止，未产出任何文件。`);
+    process.exit(1);
+  }
+
+  const pairs = toCardPairs(list, proxyList);
+  const meta = indexMeta(pairs);
+
+  // ---- 全部产物先在内存渲染完成（E12：渲染期任一异常则不落盘） ----
+  /** @type {{relPath: string, content: string}[]} */
+  let artifacts;
+  try {
+    const pages = [];
+    pages.push({
+      relPath: 'index.html',
+      content: renderLayout({
+        title: meta.title,
+        description: meta.description,
+        canonicalPath: meta.canonicalPath,
+        jsonLd: indexJsonLd(pairs),
+        mainHtml: renderIndexMain(pairs),
+        currentSlug: HOME_SLUG,
+        pairs,
+      }),
+    });
+    for (const pair of pairs) {
+      pages.push({
+        relPath: `card/${pair.slug}.html`,
+        content: renderLayout({
+          title: pair.title,
+          description: pair.description,
+          canonicalPath: pair.pageUrl,
+          jsonLd: cardJsonLd(pair),
+          mainHtml: renderCardMain(pair),
+          currentSlug: pair.slug,
+          pairs,
+        }),
+      });
+    }
+    artifacts = [
+      ...pages,
+      { relPath: 'sitemap.xml', content: renderSitemap(pairs) },
+      { relPath: 'robots.txt', content: renderRobots() },
+      { relPath: 'llms.txt', content: renderLlmsTxt(pairs) },
+    ];
+  } catch (err) {
+    console.error(`错误: 渲染页面失败: ${err && err.message ? err.message : err}`);
+    process.exit(1);
+  }
+
+  // ---- 写盘前断言：元数据唯一性 + 外链安全 + 产物数量 ----
+  const assertErrors = [];
+  assertMetaUniqueness([
+    { page: 'index.html', title: meta.title, description: meta.description },
+    ...pairs.map((pair) => ({
+      page: `card/${pair.slug}.html`,
+      title: pair.title,
+      description: pair.description,
+    })),
+  ], assertErrors);
+  for (const artifact of artifacts) {
+    if (artifact.relPath.endsWith('.html')) {
+      assertExternalLinks(artifact.relPath, artifact.content, assertErrors);
+    }
+  }
+  const htmlCount = artifacts.filter((a) => a.relPath.endsWith('.html')).length;
+  if (htmlCount !== list.length + 1) {
+    assertErrors.push(`错误: 生成的 HTML 页面数 ${htmlCount} !== list.length + 1（${list.length + 1}）`);
+  }
+  if (assertErrors.length > 0) {
+    for (const error of assertErrors) console.error(error);
+    console.error('错误: 构建期断言未通过，未写入任何文件。');
+    process.exit(1);
+  }
+
+  // ---- 统一写盘（E11：写入失败透传 Node 原生错误 + 非零退出） ----
+  const result = writeAll(artifacts);
+
+  console.log(`构建完成: ${htmlCount} 个页面（index.html + card/×${pairs.length}）+ sitemap.xml + robots.txt + llms.txt`);
+  console.log(`写入 ${result.written} 个文件，跳过 ${result.skipped} 个未变更文件，产物总计 ${result.bytes} 字节，警告 ${warnings.length} 个`);
+}
+
+/* ================================================================== */
+/* --verify 产物自检（design.md 1.3.9-B，供 CI/测试阶段复用）          */
+/* ================================================================== */
+
+/** 站点绝对 URL → 本地产物路径 */
+function urlToLocalPath(url) {
+  const base = `${SITE.baseUrl}/`;
+  if (url === base) return path.join(ROOT, 'index.html');
+  if (!url.startsWith(base)) return null;
+  return path.join(ROOT, decodeURIComponent(url.slice(base.length)));
+}
+
+/** 读取文本文件（不存在返回 null） */
+function readTextIfExist(absPath) {
+  try {
+    return fs.readFileSync(absPath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 对已生成产物执行全项自检；失败逐项列出并 exit(1)，全部通过输出通过清单。
+ */
+function verifyArtifacts() {
+  const problems = [];
+  const { list } = loadData();
+
+  // 1. 文件完整性
+  const indexPath = path.join(ROOT, 'index.html');
+  const indexHtml = readTextIfExist(indexPath);
+  if (indexHtml === null) problems.push('缺少产物 index.html');
+  let cardFiles = [];
+  if (fs.existsSync(CARD_DIR)) {
+    cardFiles = fs.readdirSync(CARD_DIR).filter((f) => f.endsWith('.html'));
+  }
+  if (cardFiles.length !== list.length) {
+    problems.push(`card/ 子页数量 ${cardFiles.length} !== list.length ${list.length}（可能存在残留旧文件或缺失子页）`);
+  }
+
+  // 2~4. 逐页语义结构 / SEO 标签 / 外链安全
+  /** @type {{rel: string, html: string}[]} */
+  const pages = [];
+  if (indexHtml !== null) pages.push({ rel: 'index.html', html: indexHtml });
+  for (const f of cardFiles) pages.push({ rel: `card/${f}`, html: fs.readFileSync(path.join(CARD_DIR, f), 'utf8') });
+
+  /** @type {Map<string, string>} */
+  const titles = new Map();
+  /** @type {Map<string, string>} */
+  const descriptions = new Map();
+  let semanticOk = true;
+  let seoOk = true;
+  let linkOk = true;
+
+  for (const page of pages) {
+    const { rel, html } = page;
+    for (const tag of ['<header', '<nav', '<main', '<section', '<footer']) {
+      if (!html.includes(tag)) {
+        problems.push(`${rel}: 缺少语义标签 ${tag.slice(1)}>`);
+        semanticOk = false;
+      }
+    }
+    const h1Count = (html.match(/<h1[\s>]/g) || []).length;
+    if (h1Count !== 1) {
+      problems.push(`${rel}: h1 数量为 ${h1Count}，应为 1`);
+      semanticOk = false;
+    }
+    const levels = Array.from(html.matchAll(/<h([1-6])[\s>]/g), (m) => Number(m[1]));
+    for (let i = 1; i < levels.length; i += 1) {
+      if (levels[i] > levels[i - 1] + 1) {
+        problems.push(`${rel}: 标题跳级 h${levels[i - 1]} → h${levels[i]}`);
+        semanticOk = false;
+      }
+    }
+
+    if (!/<meta\s+name="viewport"/.test(html)) {
+      problems.push(`${rel}: 缺少 meta viewport`);
+      seoOk = false;
+    }
+    if (!/<link\s+rel="canonical"\s+href="https:\/\//.test(html)) {
+      problems.push(`${rel}: 缺少 canonical 绝对地址`);
+      seoOk = false;
+    }
+    const titleMatch = html.match(/<title>([^<]*)<\/title>/);
+    const descMatch = html.match(/<meta\s+name="description"\s+content="([^"]*)"/);
+    if (!titleMatch) {
+      problems.push(`${rel}: 缺少 <title>`);
+      seoOk = false;
+    } else if (titles.has(titleMatch[1])) {
+      problems.push(`${rel}: title 与 ${titles.get(titleMatch[1])} 重复`);
+      seoOk = false;
+    } else {
+      titles.set(titleMatch[1], rel);
+    }
+    if (!descMatch) {
+      problems.push(`${rel}: 缺少 meta description`);
+      seoOk = false;
+    } else if (descriptions.has(descMatch[1])) {
+      problems.push(`${rel}: description 与 ${descriptions.get(descMatch[1])} 重复`);
+      seoOk = false;
+    } else {
+      descriptions.set(descMatch[1], rel);
+    }
+
+    for (const m of html.matchAll(/<a\s[^>]*>/g)) {
+      const tag = m[0];
+      const hrefMatch = tag.match(/href="([^"]*)"/);
+      if (!hrefMatch) continue;
+      const href = hrefMatch[1];
+      if (/^javascript:/i.test(href)) {
+        problems.push(`${rel}: 含 javascript: 链接 ${href}`);
+        linkOk = false;
+        continue;
+      }
+      if (/^https?:\/\//i.test(href)) {
+        if (!tag.includes('target="_blank"') || !/rel="[^"]*\bnoopener\b[^"]*"/.test(tag) || !/rel="[^"]*\bnoreferrer\b[^"]*"/.test(tag)) {
+          problems.push(`${rel}: 外链缺少安全属性（target="_blank" / rel="noopener noreferrer"）: ${href}`);
+          linkOk = false;
+        }
+      }
+    }
+  }
+
+  // 5. sitemap
+  const sitemap = readTextIfExist(path.join(ROOT, 'sitemap.xml'));
+  const locs = sitemap ? Array.from(sitemap.matchAll(/<loc>([^<]+)<\/loc>/g), (m) => m[1]) : [];
+  let sitemapOk = sitemap !== null;
+  if (sitemap === null) problems.push('缺少产物 sitemap.xml');
+  const expectedUrlCount = list.length + 1;
+  if (sitemap !== null && locs.length !== expectedUrlCount) {
+    problems.push(`sitemap <loc> 数量 ${locs.length} !== ${expectedUrlCount}`);
+    sitemapOk = false;
+  }
+  for (const loc of locs) {
+    const localPath = urlToLocalPath(loc);
+    if (localPath === null || !fs.existsSync(localPath)) {
+      problems.push(`sitemap loc 对应产物文件不存在: ${loc}`);
+      sitemapOk = false;
+    }
+  }
+
+  // 6. robots.txt
+  const robots = readTextIfExist(path.join(ROOT, 'robots.txt'));
+  let robotsOk = robots !== null && /Sitemap:\s*https:\/\/haoka17\.github\.io\/sitemap\.xml/.test(robots);
+  if (!robotsOk) problems.push('robots.txt 缺失或缺少 Sitemap 声明行');
+
+  // 7. llms.txt
+  const llms = readTextIfExist(path.join(ROOT, 'llms.txt'));
+  let llmsOk = llms !== null;
+  if (llms === null) {
+    problems.push('缺少产物 llms.txt');
+  } else {
+    const llmsUrls = new Set(Array.from(
+      llms.matchAll(/\((https:\/\/haoka17\.github\.io\/[^)\s]*)\)/g),
+      (m) => m[1],
+    ));
+    const sitemapSet = new Set(locs);
+    if (llmsUrls.size !== expectedUrlCount) {
+      problems.push(`llms.txt 页面 URL 数 ${llmsUrls.size} !== ${expectedUrlCount}`);
+      llmsOk = false;
+    }
+    for (const url of sitemapSet) {
+      if (!llmsUrls.has(url)) {
+        problems.push(`llms.txt 缺少页面 URL: ${url}`);
+        llmsOk = false;
+      }
+    }
+    for (const url of llmsUrls) {
+      if (!sitemapSet.has(url)) {
+        problems.push(`llms.txt 含 sitemap 之外的 URL: ${url}`);
+        llmsOk = false;
+      }
+    }
+  }
+
+  if (problems.length > 0) {
+    for (const problem of problems) console.error(`错误: ${problem}`);
+    console.error(`自检失败: 共 ${problems.length} 个问题。`);
+    process.exit(1);
+  }
+
+  console.log('自检通过:');
+  console.log(`  ✓ 文件完整性: index.html + card/×${cardFiles.length}`);
+  console.log(`  ✓ 语义结构: ${pages.length} 页 header/nav/main/section/footer 齐全、恰一个 h1、无标题跳级`);
+  console.log(`  ✓ SEO 标签: ${pages.length} 页 viewport/canonical/description 齐全，title/description 全站唯一`);
+  console.log(`  ✓ sitemap.xml: ${locs.length} 个 <loc> 且均对应实际产物文件`);
+  console.log('  ✓ robots.txt: 含 Sitemap 声明');
+  console.log('  ✓ llms.txt: 页面 URL 与 sitemap 完全一致');
+  console.log('  ✓ 外链安全: 全部外链含 target="_blank" rel="noopener noreferrer"，无 javascript: 链接');
+}
+
+/* ================================================================== */
+/* CLI 入口与模块导出                                                  */
+/* ================================================================== */
+
+if (require.main === module) {
+  try {
+    main();
+  } catch (err) {
+    console.error(`错误: ${err && err.message ? err.message : err}`);
+    process.exit(1);
+  }
+}
+
+module.exports = {
+  SITE,
+  SLUG_MAP,
+  HOME_SLUG,
+  ROOT,
+  escapeHtml,
+  isValidHttpUrl,
+  slugOf,
+  validateData,
+  parsePriceRange,
+  toCardPairs,
+  indexMeta,
+  renderLayout,
+  renderFooterNav,
+  renderIndexMain,
+  renderCardMain,
+  indexJsonLd,
+  cardJsonLd,
+  renderSitemap,
+  renderRobots,
+  renderLlmsTxt,
+  assertExternalLinks,
+  assertMetaUniqueness,
+  writeAll,
+  verifyArtifacts,
+};
