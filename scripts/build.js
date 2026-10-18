@@ -56,6 +56,31 @@ const RESERVED_SLUGS = [HOME_SLUG];
 /** badge 文案 → CSS 修饰类（design.md 1.3.2 badge 三色） */
 const BADGE_CLASS = { '热门': 'hot', '新品': 'new', '四网': 'quad' };
 
+/**
+ * 外部友情链接（模块级常量，便于后续扩展）。
+ * 绝对 URL + 新窗口安全属性，与当前页视角无关，首页/子页统一渲染。
+ */
+const EXTERNAL_FRIEND_LINKS = [
+  { name: '券宝', url: 'https://jdjdndn.github.io/' },
+];
+
+/** 子页办理流程四步（通用文案，不涉平台特定事实，禁止编造 data.js 之外的资费/合约信息） */
+const CARD_STEPS = [
+  { title: '选择平台', desc: '对比各平台资费区间与覆盖范围，确定适合的号卡平台' },
+  { title: '跳转官方入口', desc: '点击“前往官方平台”按钮，在新标签页打开平台页面' },
+  { title: '选号与实名', desc: '在平台内选择号码与套餐，按提示完成实名登记' },
+  { title: '收卡激活', desc: '等待收到号卡后，按平台指引激活即可正常使用' },
+];
+
+/** 平台特色 badge 缺失时的速览回退文案（E8 降级） */
+const SPEC_BADGE_FALLBACK = '号卡办理';
+
+/** 子页平台简介的通用导航站补充文案（不编造具体资费数字/合约期等事实） */
+const INTRO_SUPPLEMENT = '本站收录其官方办理入口与代理申请通道，资费以平台页面实时展示为准。';
+
+/** 代理合作卡说明文案（通用中性表述） */
+const AGENT_CARD_DESC = '有意代理推广？直达该平台代理申请通道，注册后即可推广分佣。';
+
 /** 子页 meta description 中 description 的截取长度（design.md 1.3.5） */
 const DESC_SLICE = 70;
 /** meta title / description 最大长度 */
@@ -357,32 +382,41 @@ function indexMeta(pairs) {
 /* ③ 渲染层（模板函数，无模板引擎）                                    */
 /* ================================================================== */
 
-/** 通用布局骨架头部导航：首页在首页本身渲染为当前位置 span，其余为站内链接 */
+/** 通用布局骨架头部导航：首页在首页本身渲染为当前位置 span，其余为站内链接（子页视角为相对路径回链） */
 function renderHeaderNav(currentSlug) {
   const homeItem = currentSlug === HOME_SLUG
     ? '<span aria-current="page" class="nav-current">首页</span>'
-    : '<a href="/">首页</a>';
+    : '<a href="../index.html">首页</a>';
   return `<nav aria-label="主导航">${homeItem}</nav>`;
 }
 
 /**
  * 渲染页脚友情链接导航（design.md 1.3.3）。
- * 11 入口 = 首页（/）+ 全部子页（/card/{slug}.html），全部来自 CardPair[]。
- * 当前页渲染为 <span aria-current="page" class="current">（排除自链接），
- * 其余为同窗口站内链接。
+ * 12 入口 = 首页（/）+ 全部子页（/card/{slug}.html）+ 外部友链（EXTERNAL_FRIEND_LINKS）。
+ * 站内入口来自 CardPair[]：当前页渲染为 <span aria-current="page" class="current">（排除自链接），
+ * 其余为同窗口站内链接；外部友链为绝对 URL 新窗口链接（与视角无关）。
  * @param {string} currentSlug HOME_SLUG 或子页 slug
  * @param {CardPair[]} pairs
  * @returns {string}
  */
 function renderFooterNav(currentSlug, pairs) {
+  const isHome = currentSlug === HOME_SLUG;
+  // 子页入口 href 前缀：首页视角需加 card/ 目录；子页视角与目标同在 card/ 目录，直接同目录互链
+  const cardHref = (slug) => `${isHome ? 'card/' : ''}${escapeHtml(slug)}.html`;
   const items = [];
-  items.push(currentSlug === HOME_SLUG
+  items.push(isHome
     ? '<li><span aria-current="page" class="current">首页</span></li>'
-    : '<li><a href="/">首页</a></li>');
+    : '<li><a href="../index.html">首页</a></li>');
   for (const pair of pairs) {
     items.push(pair.slug === currentSlug
       ? `<li><span aria-current="page" class="current">${escapeHtml(pair.card.name)}</span></li>`
-      : `<li><a href="/card/${escapeHtml(pair.slug)}.html">${escapeHtml(pair.card.name)}</a></li>`);
+      : `<li><a href="${cardHref(pair.slug)}">${escapeHtml(pair.card.name)}</a></li>`);
+  }
+  // 外部友链：绝对 URL + 新窗口安全属性（首页/子页统一渲染）
+  for (const link of EXTERNAL_FRIEND_LINKS) {
+    items.push(
+      `<li><a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.name)} ↗</a></li>`
+    );
   }
   return [
     '<nav class="friend-links" aria-label="友情链接">',
@@ -405,6 +439,11 @@ function renderLayout(page) {
   const { title, description, canonicalPath, jsonLd, mainHtml, currentSlug, pairs } = page;
   const year = new Date().getFullYear();
   const jsonLdText = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+  // 站内静态资源/互链前缀：首页位于站点根（''），子页位于 card/ 目录（'../'），
+  // 保证 file:// 协议双击打开时样式/脚本/图标/跳转均可用；
+  // SEO 绝对 URL（canonical / og:* / JSON-LD）保持原样，不受前缀影响。
+  const isHome = currentSlug === HOME_SLUG;
+  const assetPrefix = isHome ? '' : '../';
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -422,15 +461,18 @@ function renderLayout(page) {
 <meta property="og:url" content="${escapeHtml(canonicalPath)}">
 <meta property="og:image" content="${escapeHtml(SITE.baseUrl + SITE.ogImage)}">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="icon" href="${assetPrefix}assets/img/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="${assetPrefix}assets/img/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="${assetPrefix}assets/img/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="${assetPrefix}assets/img/apple-touch-icon.png">
+<link rel="stylesheet" href="${assetPrefix}assets/css/style.css">
 <script type="application/ld+json">${jsonLdText}</script>
 </head>
 <body>
 <a class="skip-link" href="#main">跳到主要内容</a>
 <header class="site-header">
   <div class="container header-inner">
-    <a class="logo" href="/">⬡ ${SITE.siteName}</a>
+    <a class="logo" href="${isHome ? 'index.html' : '../index.html'}">⬡ ${SITE.siteName}</a>
     ${renderHeaderNav(currentSlug)}
   </div>
 </header>
@@ -443,7 +485,7 @@ ${renderFooterNav(currentSlug, pairs)}
     <p class="copyright">© <span data-year>${year}</span> ${SITE.siteName} · 免责声明</p>
   </div>
 </footer>
-<script src="/assets/js/main.js" defer></script>
+<script src="${assetPrefix}assets/js/main.js" defer></script>
 </body>
 </html>
 `;
@@ -486,7 +528,7 @@ function renderIndexMain(pairs) {
     <p class="price">${escapeHtml(card.priceRange)}</p>
     ${areaTag ? `    <div class="card-tags">${areaTag}</div>\n` : ''}    <div class="card-actions">
       <a class="card-cta" href="${escapeHtml(card.url)}" target="_blank" rel="noopener noreferrer">前往${escapeHtml(card.name)} ↗</a>
-      <a class="card-link" href="/card/${escapeHtml(pair.slug)}.html">查看详情 →</a>
+      <a class="card-link" href="card/${escapeHtml(pair.slug)}.html">查看详情 →</a>
     </div>
   </article>
 </li>`;
@@ -523,16 +565,96 @@ ${proxies}
 }
 
 /**
- * 渲染子页 main 区：平台详情卡 + 双 CTA 按钮。
- * @param {CardPair} pair
+ * 子页常见问题通用问答（4 条）。
+ * 文案不编造 data.js 之外的资费数字/合约期等事实，涉及资费处一律以平台实时展示为准。
+ * @param {string} cardName 平台名（用于 FAQ 文案中的引导表述）
+ * @returns {{q: string, a: string}[]}
+ */
+function cardFaqs(cardName) {
+  return [
+    {
+      q: '在这里办理号卡正规吗？',
+      a: `本站是导航站，不直接售卡。点击“前往${cardName}官方平台”按钮将跳转至平台官方入口，选号、实名与付款均在平台内完成。`,
+    },
+    {
+      q: '页面展示的资费准确吗？',
+      a: '页面资费区间仅供参考，实际套餐、价格与优惠以平台页面实时展示为准。',
+    },
+    {
+      q: '如何申请成为代理？',
+      a: '进入上方“代理合作”区块，点击按钮直达该平台代理申请通道，注册后即可推广分佣。',
+    },
+    {
+      q: '本站与号卡平台是什么关系？',
+      a: '本站仅收录各平台官方办理入口与代理申请通道，提供信息导航与比选服务，不参与售卡、物流与售后。',
+    },
+  ];
+}
+
+/**
+ * 渲染子页 main 区（结构增强版）：
+ * hero（eyebrow/标题/badge/资费/覆盖/双 CTA/note）
+ * + 平台速览网格 + 平台简介 + 办理流程步骤条 + 代理合作卡 + 常见问题 FAQ + 相关平台推荐。
+ * 简介段 = card.description 全文 + 通用导航站补充文案（不编造 data.js 之外的事实）。
+ * @param {CardPair} pair 当前子页配对
+ * @param {CardPair[]} pairs 全部配对（"其他号卡平台"推荐来源，自动排除当前页）
  * @returns {string}
  */
-function renderCardMain(pair) {
+function renderCardMain(pair, pairs) {
   const { card, proxy } = pair;
   const badge = renderBadge(card.badge);
   const areaItem = typeof card.nationwide === 'boolean'
     ? `\n      <li>📍 ${card.nationwide ? '全国通用' : '部分地区'}</li>`
     : '';
+
+  // 模块 1：平台速览（覆盖范围格仅在 nationwide 存在时渲染；平台特色缺失回退通用文案）
+  const specs = [
+    { term: '平台名称', desc: card.name },
+    { term: '参考资费', desc: card.priceRange },
+  ];
+  if (typeof card.nationwide === 'boolean') {
+    specs.push({ term: '覆盖范围', desc: card.nationwide ? '全国通用' : '部分地区' });
+  }
+  specs.push({ term: '平台特色', desc: card.badge || SPEC_BADGE_FALLBACK });
+  const specItems = specs.map((spec) => `      <div class="spec-item">
+        <dt>${escapeHtml(spec.term)}</dt>
+        <dd>${escapeHtml(spec.desc)}</dd>
+      </div>`).join('\n');
+
+  // 模块 3：办理流程步骤条（通用四步）
+  const stepItems = CARD_STEPS.map((step, i) => `      <li class="step">
+        <span class="step-num" aria-hidden="true">${i + 1}</span>
+        <div class="step-body">
+          <h3>${escapeHtml(step.title)}</h3>
+          <p>${escapeHtml(step.desc)}</p>
+        </div>
+      </li>`).join('\n');
+
+  // 模块 5：常见问题（原生 details/summary 折叠）
+  const faqItems = cardFaqs(card.name).map((item) => `      <details class="faq-item">
+        <summary>${escapeHtml(item.q)}</summary>
+        <p>${escapeHtml(item.a)}</p>
+      </details>`).join('\n');
+
+  // 模块 6：相关平台推荐（排除当前页；子页视角同目录 {slug}.html 相对互链；无其余平台时整区不渲染）
+  const related = (Array.isArray(pairs) ? pairs : []).filter((p) => p.slug !== pair.slug);
+  const relatedItems = related.map((p) => `      <li class="related-card">
+        <h3>${escapeHtml(p.card.name)}</h3>
+        <p class="related-desc">${escapeHtml(p.card.description)}</p>
+        <a class="related-link" href="${escapeHtml(p.slug)}.html">查看${escapeHtml(p.card.name)}详情 →</a>
+      </li>`).join('\n');
+  const relatedSection = related.length > 0
+    ? `
+<section class="related-section" aria-labelledby="related-section-title">
+  <div class="container">
+    <h2 id="related-section-title">其他号卡平台</h2>
+    <ul class="related-grid">
+${relatedItems}
+    </ul>
+  </div>
+</section>`
+    : '';
+
   return `<section class="card-detail">
   <div class="container card-detail-inner">
     <p class="eyebrow">号卡平台</p>
@@ -543,14 +665,52 @@ function renderCardMain(pair) {
     <ul class="meta-row">
       <li>💳 资费：<strong class="price">${escapeHtml(card.priceRange)}</strong></li>${areaItem}
     </ul>
-    <p class="desc">${escapeHtml(card.description)}</p>
     <div class="cta-group">
       <a class="btn btn-primary" href="${escapeHtml(card.url)}" target="_blank" rel="noopener noreferrer">前往${escapeHtml(card.name)}官方平台 ↗</a>
       <a class="btn btn-secondary" href="${escapeHtml(proxy.url)}" target="_blank" rel="noopener noreferrer">申请成为${escapeHtml(card.name)}代理 ↗</a>
     </div>
     <p class="note">跳转至外部平台，本站不直接售卡</p>
   </div>
-</section>`;
+</section>
+<section class="card-extra">
+  <div class="container">
+    <section class="extra-block">
+      <h2>平台速览</h2>
+      <dl class="spec-grid">
+${specItems}
+      </dl>
+    </section>
+    <section class="extra-block">
+      <h2>平台简介</h2>
+      <div class="platform-intro">
+        <p>${escapeHtml(card.description)}</p>
+        <p>${INTRO_SUPPLEMENT}</p>
+      </div>
+    </section>
+    <section class="extra-block">
+      <h2>办理流程</h2>
+      <ol class="steps">
+${stepItems}
+      </ol>
+    </section>
+    <section class="extra-block">
+      <h2>代理合作</h2>
+      <div class="agent-card">
+        <div class="agent-card-body">
+          <p class="agent-card-name">${escapeHtml(proxy.name)}</p>
+          <p class="agent-card-desc">${AGENT_CARD_DESC}</p>
+        </div>
+        <a class="btn btn-primary agent-card-cta" href="${escapeHtml(proxy.url)}" target="_blank" rel="noopener noreferrer">直达代理申请通道 ↗</a>
+      </div>
+    </section>
+    <section class="extra-block">
+      <h2>常见问题</h2>
+      <div class="faq">
+${faqItems}
+      </div>
+    </section>
+  </div>
+</section>${relatedSection}`;
 }
 
 /* ================================================================== */
@@ -657,13 +817,23 @@ ${urlBlocks.join('\n')}
 `;
 }
 
-/** 生成 robots.txt（固定文案：允许全站 + sitemap 声明） */
+/**
+ * 生成 robots.txt：全站允许抓取 + AI 爬虫 GEO 段（生成式引擎优化，逐爬虫显式 Allow）+ sitemap 声明。
+ * 文案为固定格式（含注释与空行），与仓库产物逐字符一致。
+ */
 function renderRobots() {
-  return `User-agent: *
-Allow: /
-
-Sitemap: ${SITE.baseUrl}/sitemap.xml
-`;
+  /** GEO 显式允许的 AI 爬虫清单（design.md：生成式引擎优化） */
+  const AI_BOTS = ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'Google-Extended', 'Bytespider', 'CCBot'];
+  return [
+    'User-agent: *',
+    'Allow: /',
+    '',
+    '',
+    '# AI 爬虫允许（GEO / 生成式引擎优化）',
+    ...AI_BOTS.flatMap((bot) => [`User-agent: ${bot}`, 'Allow: /', '']),
+    '# Sitemap',
+    `Sitemap: ${SITE.baseUrl}/sitemap.xml`,
+  ].join('\n') + '\n';
 }
 
 /**
@@ -879,7 +1049,7 @@ function main() {
           description: pair.description,
           canonicalPath: pair.pageUrl,
           jsonLd: cardJsonLd(pair),
-          mainHtml: renderCardMain(pair),
+          mainHtml: renderCardMain(pair, pairs),
           currentSlug: pair.slug,
           pairs,
         }),
@@ -1137,6 +1307,8 @@ module.exports = {
   SLUG_MAP,
   HOME_SLUG,
   ROOT,
+  EXTERNAL_FRIEND_LINKS,
+  CARD_STEPS,
   escapeHtml,
   isValidHttpUrl,
   slugOf,
@@ -1148,6 +1320,7 @@ module.exports = {
   renderFooterNav,
   renderIndexMain,
   renderCardMain,
+  cardFaqs,
   indexJsonLd,
   cardJsonLd,
   renderSitemap,

@@ -4,8 +4,10 @@
  *
  * 覆盖 design.md 1.3.9-A 测试矩阵：
  * validateData 契约（E1~E10）、toCardPairs 配对、slugOf 优先级与快照、
- * badge/nationwide 可选（E8）、renderFooterNav（11 入口/10 链接）、
- * title/description 唯一性与截断、外链属性、JSON-LD、priceRange 解析。
+ * badge/nationwide 可选（E8）、renderFooterNav（12 入口/11 链接，含外部友链）、
+ * renderCardMain 结构增强（速览网格/简介/步骤条/代理卡/FAQ/相关推荐）、
+ * title/description 唯一性与截断、外链属性、JSON-LD、priceRange 解析、
+ * 站内相对路径（首页/子页前缀规则）与 favicon link 组。
  */
 'use strict';
 
@@ -24,6 +26,7 @@ const {
   renderLayout,
   renderIndexMain,
   renderCardMain,
+  cardFaqs,
   indexJsonLd,
   cardJsonLd,
   assertExternalLinks,
@@ -229,18 +232,19 @@ test('renderIndexMain：badge/价格/覆盖标签/双链接/代理区；E8 缺�
   // 外链转义（& → &amp;）与安全属性
   assert.ok(html.includes('href="https://a.example.com/?x=1&amp;y=2#z"'), 'URL 特殊字符应被转义');
   assert.ok((html.match(/target="_blank" rel="noopener noreferrer"/g) || []).length >= 4, '号卡外链+代理外链均含安全属性');
-  // 站内详情链接（同窗口，无 target）
-  assert.ok(html.includes('href="/card/test-a.html"'));
+  // 站内详情链接（同窗口，无 target；首页视角相对路径 card/{slug}.html）
+  assert.ok(html.includes('href="card/test-a.html"'));
   // 代理合作区：仅代理链接，不含号卡办理链接（design.md 2.1 外链跳转约定）
   assert.ok(html.includes('代理合作入口') && html.includes('测试卡A代理'));
 });
 
 /* ================================================================== */
-/* 6. renderCardMain（子页：信息 + 双 CTA）                            */
+/* 6. renderCardMain（子页：hero 双 CTA + 六大扩展模块）               */
 /* ================================================================== */
 
-test('renderCardMain：name/description/priceRange/nationwide/badge 与双外链按钮', () => {
-  const pair = {
+/** 构造子页渲染测试用配对（当前页 + 2 个其他平台） */
+function makeCardMainPairs() {
+  const current = {
     card: {
       name: '测试卡',
       url: 'https://card.example.com/',
@@ -252,21 +256,135 @@ test('renderCardMain：name/description/priceRange/nationwide/badge 与双外链
     proxy: { name: '测试卡代理', url: 'https://proxy.example.com/' },
     slug: 'test',
   };
-  const html = renderCardMain(pair);
+  const others = [
+    {
+      card: { name: '甲卡', url: 'https://a.example.com/', description: '甲平台简介', priceRange: '9-19元/月' },
+      proxy: { name: '甲卡代理', url: 'https://pa.example.com/' },
+      slug: 'card-a',
+    },
+    {
+      card: { name: '乙卡', url: 'https://b.example.com/', description: '乙平台简介', priceRange: '29-39元/月' },
+      proxy: { name: '乙卡代理', url: 'https://pb.example.com/' },
+      slug: 'card-b',
+    },
+  ];
+  return { current, pairs: [current, ...others] };
+}
+
+test('renderCardMain：hero 双 CTA + 速览网格 + 简介 + 步骤条 + 代理卡 + FAQ + 相关推荐', () => {
+  const { current, pairs } = makeCardMainPairs();
+  const html = renderCardMain(current, pairs);
+
+  // hero：h1 / badge / 资费 / 覆盖 / 双外链 CTA
   assert.ok(html.includes('<h1>测试卡</h1>'));
-  assert.ok(html.includes('测试描述文本'));
+  assert.ok(html.includes('badge-hot') && html.includes('>热门<'));
   assert.ok(html.includes('19-49元/月'));
   assert.ok(html.includes('部分地区'), 'nationwide=false 应展示"部分地区"');
-  assert.ok(html.includes('badge-hot') && html.includes('>热门<'));
   assert.ok(html.includes('href="https://card.example.com/" target="_blank" rel="noopener noreferrer"'));
   assert.ok(html.includes('href="https://proxy.example.com/" target="_blank" rel="noopener noreferrer"'));
+
+  // 模块 1：平台速览网格（dl.spec-grid，四格 dt/dd 对应派生字段）
+  const specGrid = html.match(/<dl class="spec-grid">[\s\S]*?<\/dl>/);
+  assert.ok(specGrid, '应含 <dl class="spec-grid">');
+  assert.strictEqual(
+    (specGrid[0].match(/<div class="spec-item">/g) || []).length, 4,
+    '速览应含 4 格（名称/资费/覆盖/特色）'
+  );
+  assert.ok(specGrid[0].includes('<dt>平台名称</dt>') && specGrid[0].includes('<dd>测试卡</dd>'));
+  assert.ok(specGrid[0].includes('<dt>参考资费</dt>') && specGrid[0].includes('<dd>19-49元/月</dd>'));
+  assert.ok(specGrid[0].includes('<dt>覆盖范围</dt>') && specGrid[0].includes('<dd>部分地区</dd>'));
+  assert.ok(specGrid[0].includes('<dt>平台特色</dt>') && specGrid[0].includes('<dd>热门</dd>'));
+
+  // 模块 2：平台简介 = description 全文 + 通用导航站补充文案
+  assert.ok(html.includes('平台简介'));
+  assert.ok(html.includes('测试描述文本'));
+  assert.ok(html.includes('本站收录其官方办理入口与代理申请通道，资费以平台页面实时展示为准。'));
+
+  // 模块 3：办理流程步骤条（ol.steps 四步，标题与序号）
+  const steps = html.match(/<ol class="steps">[\s\S]*?<\/ol>/);
+  assert.ok(steps, '应含 <ol class="steps">');
+  assert.strictEqual((steps[0].match(/<li class="step">/g) || []).length, 4, '步骤条应含 4 步');
+  for (const [i, title] of ['选择平台', '跳转官方入口', '选号与实名', '收卡激活'].entries()) {
+    assert.ok(steps[0].includes(`<h3>${title}</h3>`), `第 ${i + 1} 步标题应为"${title}"`);
+    assert.ok(steps[0].includes(`>${i + 1}</span>`), `第 ${i + 1} 步应含序号 ${i + 1}`);
+  }
+
+  // 模块 4：代理合作卡（代理名 + 说明 + 安全属性 CTA）
+  assert.ok(html.includes('class="agent-card"'), '应含代理合作卡');
+  assert.ok(html.includes('>测试卡代理</p>'), '代理卡应展示代理名');
+  assert.ok(html.includes('直达代理申请通道'));
+  assert.strictEqual(
+    (html.match(/href="https:\/\/proxy\.example\.com\/" target="_blank" rel="noopener noreferrer"/g) || []).length,
+    2,
+    'hero 次级 CTA 与代理卡 CTA 均指向代理 URL 且含安全属性'
+  );
+
+  // 模块 5：常见问题（4 个 details/summary 折叠条目）
+  assert.strictEqual(
+    (html.match(/<details class="faq-item">/g) || []).length, 4,
+    'FAQ 应含 4 个 details 条目'
+  );
+  assert.strictEqual((html.match(/<summary>/g) || []).length, 4, '每条 FAQ 含一个 summary');
+  assert.ok(html.includes('本站是导航站，不直接售卡'), 'FAQ 应含"是否正规"问答');
+
+  // 模块 6：相关平台推荐（排除当前页，同目录相对互链）
+  const related = html.match(/<ul class="related-grid">[\s\S]*?<\/ul>/);
+  assert.ok(related, '应含 <ul class="related-grid">');
+  assert.strictEqual(
+    (related[0].match(/<li class="related-card">/g) || []).length, 2,
+    '3 个平台排除当前页后应推荐 2 个'
+  );
+  assert.ok(related[0].includes('href="card-a.html"'), '相关推荐应为同目录相对链接 card-a.html');
+  assert.ok(related[0].includes('href="card-b.html"'));
+  assert.ok(!related[0].includes('href="test.html"'), '当前页不得出现在相关推荐中');
+  assert.ok(!related[0].includes('测试卡'), '相关推荐不含当前页平台名');
+  assert.ok(related[0].includes('甲平台简介') && related[0].includes('乙平台简介'), '相关推荐含平台简述');
+  assert.ok(html.includes('其他号卡平台'), '推荐区 h2 标题');
+});
+
+test('renderCardMain E8 降级：nationwide 缺失少渲染覆盖范围格，badge 缺失回退通用文案', () => {
+  const current = {
+    card: {
+      name: '无标记卡',
+      url: 'https://c.example.com/',
+      description: '无标记平台简介',
+      priceRange: '9-19元/月',
+    },
+    proxy: { name: '无标记卡代理', url: 'https://pc.example.com/' },
+    slug: 'no-tag',
+  };
+  const html = renderCardMain(current, [current]);
+
+  // 速览：3 格（无覆盖范围），平台特色回退"号卡办理"
+  const specGrid = html.match(/<dl class="spec-grid">[\s\S]*?<\/dl>/);
+  assert.ok(specGrid);
+  assert.strictEqual(
+    (specGrid[0].match(/<div class="spec-item">/g) || []).length, 3,
+    'nationwide 缺失时速览仅 3 格'
+  );
+  assert.ok(!specGrid[0].includes('覆盖范围'), '不得渲染覆盖范围格');
+  assert.ok(specGrid[0].includes('<dt>平台特色</dt>') && specGrid[0].includes('<dd>号卡办理</dd>'),
+    'badge 缺失时平台特色回退"号卡办理"');
+  // hero meta-row 同样不含覆盖项（E8 既有行为保持）
+  assert.ok(!html.includes('📍'), 'hero 覆盖标签不渲染');
+
+  // 仅 1 个平台时无相关推荐：不渲染空的 related-section（避免空标题区块）
+  assert.ok(!html.includes('related-grid'), '无其余平台时整区不渲染');
+  assert.ok(!html.includes('其他号卡平台'));
+});
+
+test('cardFaqs：4 条通用问答，第 1 条答案引用平台名', () => {
+  const faqs = cardFaqs('测试卡');
+  assert.strictEqual(faqs.length, 4);
+  assert.ok(faqs[0].a.includes('前往测试卡官方平台'), 'FAQ 正规性答案应引导至当前平台官方入口');
+  assert.ok(faqs.every((f) => typeof f.q === 'string' && f.q !== '' && typeof f.a === 'string' && f.a !== ''));
 });
 
 /* ================================================================== */
-/* 7. renderFooterNav（当前页排除自链接 + 11 入口/10 链接）            */
+/* 7. renderFooterNav（当前页排除自链接 + 12 入口/11 链接含外部友链）  */
 /* ================================================================== */
 
-test('renderFooterNav：当前页为 span[aria-current]，其余为 <a>', () => {
+test('renderFooterNav：当前页为 span[aria-current]，其余为 <a>，末尾外部友链', () => {
   const pairs = toCardPairs(
     [makeCard({ name: '电信星卡' }), makeCard({ name: '172号卡' })],
     [makeProxy({ name: '电信星卡代理' }), makeProxy({ name: '172号卡代理' })]
@@ -274,26 +392,45 @@ test('renderFooterNav：当前页为 span[aria-current]，其余为 <a>', () => 
   const html = renderFooterNav('dianxin-xingka', pairs);
 
   const items = html.match(/<li>/g) || [];
-  assert.strictEqual(items.length, 3, '首页 + 每个子页各一个入口');
+  assert.strictEqual(items.length, 4, '首页 + 每个子页 + 外部友链各一个入口');
   assert.ok(html.includes('<span aria-current="page" class="current">电信星卡</span>'));
-  assert.ok(html.includes('<a href="/">首页</a>'));
-  assert.ok(html.includes('href="/card/172-haoka.html"'));
+  assert.ok(html.includes('<a href="../index.html">首页</a>'), '子页视角首页入口回链 ../index.html');
+  assert.ok(html.includes('href="172-haoka.html"'), '子页视角同目录互链 {slug}.html');
   assert.strictEqual((html.match(/aria-current="page"/g) || []).length, 1, 'aria-current 全页唯一');
-  assert.ok(!html.includes('href="/card/dianxin-xingka.html"'), '当前页不得出现自链接');
+  assert.ok(!html.includes('href="dianxin-xingka.html"'), '当前页不得出现自链接');
+
+  // 外部友链：绝对 URL + 新窗口安全属性，渲染在列表末尾
+  assert.ok(
+    html.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝</a></li>'),
+    '末尾应含外部友链 jdjdndn.github.io（含 target=_blank rel=noopener noreferrer）'
+  );
+  const externalItem = html.indexOf('https://jdjdndn.github.io/');
+  const lastInternal = html.lastIndexOf('.html">');
+  assert.ok(externalItem > lastInternal, '外部友链应位于站内链接之后（列表末尾）');
 
   const homeHtml = renderFooterNav('index', pairs);
   assert.ok(homeHtml.includes('<span aria-current="page" class="current">首页</span>'));
-  assert.ok(homeHtml.includes('href="/card/dianxin-xingka.html"'));
+  assert.ok(homeHtml.includes('href="card/dianxin-xingka.html"'), '首页视角子页入口带 card/ 前缀');
+  assert.ok(
+    homeHtml.includes('href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer"'),
+    '首页视角同样渲染外部友链'
+  );
 });
 
-test('renderFooterNav 真实数据：入口总数 = 11，链接数 = 10（design.md 1.3.9-A）', () => {
+test('renderFooterNav 真实数据：入口总数 = 12，链接数 = 11（10 站内 + 1 外部友链）', () => {
   const { list, proxyList } = loadRealData();
   const pairs = toCardPairs(list, proxyList);
   for (const current of ['index', ...pairs.map((p) => p.slug)]) {
     const html = renderFooterNav(current, pairs);
-    assert.strictEqual((html.match(/<li>/g) || []).length, 11, '入口总数 = 11');
-    assert.strictEqual((html.match(/<li><a /g) || []).length, 10, '链接数 = 10');
+    assert.strictEqual((html.match(/<li>/g) || []).length, 12, '入口总数 = 12');
+    assert.strictEqual((html.match(/<li><a /g) || []).length, 11, '链接数 = 11');
     assert.strictEqual((html.match(/aria-current="page"/g) || []).length, 1);
+    assert.ok(
+      html.includes('href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer"'),
+      '每个视角均渲染外部友链'
+    );
+    // 外部友链仅 1 个（不随视角重复）
+    assert.strictEqual((html.match(/https:\/\/jdjdndn\.github\.io\//g) || []).length, 1);
   }
 });
 
@@ -326,6 +463,46 @@ test('renderLayout：SEO meta 全集、JSON-LD 注入、友情链接渲染', () 
   assert.ok(html.includes('<script type="application/ld+json">'), '应注入 JSON-LD');
   assert.ok(html.includes('friend-links'), '页脚友情链接区块存在');
   assert.ok(html.includes('<main id="main">'), 'main 地标存在');
+
+  // 子页视角相对路径：静态资源回链 ../assets/，首页入口回链 ../index.html
+  assert.ok(html.includes('href="../assets/css/style.css"'), '子页样式表应为 ../assets/ 相对路径');
+  assert.ok(html.includes('src="../assets/js/main.js"'), '子页脚本应为 ../assets/ 相对路径');
+  assert.ok(html.includes('href="../index.html"'), '子页 logo/导航应回链 ../index.html');
+  // favicon link 组（svg + 32 + 16 + apple-touch-icon，子页带 ../ 前缀）
+  assert.ok(html.includes('href="../assets/img/favicon.svg" type="image/svg+xml"'));
+  assert.ok(html.includes('href="../assets/img/favicon-32.png" type="image/png" sizes="32x32"'));
+  assert.ok(html.includes('href="../assets/img/favicon-16.png" type="image/png" sizes="16x16"'));
+  assert.ok(html.includes('href="../assets/img/apple-touch-icon.png"'));
+  assert.strictEqual((html.match(/<link rel="(icon|apple-touch-icon)"/g) || []).length, 4, 'favicon link 共 4 个');
+  // 全页不得出现根绝对路径引用（href="/..." / src="/..."）
+  assert.ok(!/(?:href|src)="\//.test(html), '不得出现根绝对路径引用');
+});
+
+test('renderLayout 首页版：资源/互链/favicon 均为站点根相对路径（无 ../ 前缀）', () => {
+  const pairs = toCardPairs(
+    [makeCard({ name: '号易' })],
+    [makeProxy({ name: '号易代理' })]
+  );
+  const html = renderLayout({
+    title: '首页标题',
+    description: '首页描述',
+    canonicalPath: 'https://haoka17.github.io/',
+    jsonLd: { '@context': 'https://schema.org', '@type': 'WebSite' },
+    mainHtml: '<section><p>home content</p></section>',
+    currentSlug: 'index',
+    pairs,
+  });
+
+  assert.ok(html.includes('href="assets/css/style.css"'), '首页样式表应为 assets/ 相对路径');
+  assert.ok(html.includes('src="assets/js/main.js"'), '首页脚本应为 assets/ 相对路径');
+  assert.ok(html.includes('<a class="logo" href="index.html">'), '首页 logo 应指向 index.html');
+  assert.ok(html.includes('href="assets/img/favicon.svg" type="image/svg+xml"'));
+  assert.ok(html.includes('href="assets/img/favicon-32.png" type="image/png" sizes="32x32"'));
+  assert.ok(html.includes('href="assets/img/favicon-16.png" type="image/png" sizes="16x16"'));
+  assert.ok(html.includes('href="assets/img/apple-touch-icon.png"'));
+  assert.ok(!html.includes('"../assets/img/favicon'), '首页 favicon 不应带 ../ 前缀');
+  assert.ok(html.includes('href="card/haoyi.html"'), '首页页脚子页入口应带 card/ 前缀');
+  assert.ok(!/(?:href|src)="\//.test(html), '不得出现根绝对路径引用');
 });
 
 /* ================================================================== */
@@ -597,10 +774,36 @@ test('renderSitemap：不传日期时 lastmod 默认为当天（YYYY-MM-DD 格�
   for (const d of dates) assert.match(d, /^\d{4}-\d{2}-\d{2}$/);
 });
 
-test('renderRobots：固定文案——允许全站抓取并声明 sitemap 绝对地址', () => {
+test('renderRobots：允许全站 + AI 爬虫 GEO 段 + sitemap 声明（固定文案逐字符一致）', () => {
   assert.strictEqual(
     renderRobots(),
-    'User-agent: *\nAllow: /\n\nSitemap: https://haoka17.github.io/sitemap.xml\n'
+    [
+      'User-agent: *',
+      'Allow: /',
+      '',
+      '',
+      '# AI 爬虫允许（GEO / 生成式引擎优化）',
+      'User-agent: GPTBot',
+      'Allow: /',
+      '',
+      'User-agent: ClaudeBot',
+      'Allow: /',
+      '',
+      'User-agent: PerplexityBot',
+      'Allow: /',
+      '',
+      'User-agent: Google-Extended',
+      'Allow: /',
+      '',
+      'User-agent: Bytespider',
+      'Allow: /',
+      '',
+      'User-agent: CCBot',
+      'Allow: /',
+      '',
+      '# Sitemap',
+      'Sitemap: https://haoka17.github.io/sitemap.xml',
+    ].join('\n') + '\n'
   );
 });
 

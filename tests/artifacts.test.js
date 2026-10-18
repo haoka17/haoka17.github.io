@@ -7,11 +7,14 @@
  * 覆盖：
  * - index.html：10 个号卡名 + 10 个代理链接 + 10 个子页入口
  * - 子页（×10）：双 CTA 外链 href 与 data.js 逐字符一致（含长查询参数）、安全属性
- * - 友情链接：每页 11 入口 / 10 链接、当前页排除自链接并高亮
+ * - 子页结构增强：速览网格 / 平台简介 / 办理流程 / 代理合作卡 / FAQ / 相关平台推荐
+ * - 友情链接：每页 12 入口 / 11 链接（10 站内 + 1 外部友链）、当前页排除自链接并高亮（相对路径互链）
  * - SEO：11 页独立 title / meta description / canonical / JSON-LD，两两唯一
  * - sitemap.xml：11 个 <loc> 且对应实际产物文件
  * - robots.txt：允许全站抓取 + Sitemap 声明
  * - llms.txt：列出全部 11 个页面 URL，与 sitemap 集合一致
+ * - favicon 与相对路径：11 页 4 个 favicon link、图标文件存在且为合法 PNG、
+ *   站内引用全部相对路径（file:// 双击可看），SEO 绝对 URL 保持不变
  * - 产物新鲜度：全部产物与当前 data.js + build.js 重新渲染结果一致
  */
 'use strict';
@@ -112,8 +115,8 @@ test('index.html：含全部 10 个号卡名与对应子页入口链接', () => 
       `首页应含号卡卡片标题: ${pair.card.name}`
     );
     assert.ok(
-      indexHtml.includes(`href="/card/${pair.slug}.html"`),
-      `首页应含"查看详情"子页入口: /card/${pair.slug}.html`
+      indexHtml.includes(`href="card/${pair.slug}.html"`),
+      `首页应含"查看详情"子页入口: card/${pair.slug}.html`
     );
     assert.ok(
       indexHtml.includes(`>${pair.card.priceRange}</p>`),
@@ -181,30 +184,152 @@ test('子页：每页含对应号卡链接与代理链接（href 逐字符一致
   }
 });
 
-test('子页：底部友情链接共 10 个入口（排除自身），当前页高亮、含首页与其余 9 个子页', () => {
+test('子页：底部友情链接共 12 个入口（排除自身 + 外部友链），当前页高亮、含首页与其余 9 个子页', () => {
   for (const { pair, html } of cardPages) {
     const where = `card/${pair.slug}.html`;
     const nav = friendLinksBlock(html, where);
 
-    assert.strictEqual((nav.match(/<li>/g) || []).length, 11, `${where} 友链入口总数应为 11`);
-    assert.strictEqual((nav.match(/<li><a /g) || []).length, 10, `${where} 友链可点击链接应为 10（排除自身）`);
+    assert.strictEqual((nav.match(/<li>/g) || []).length, 12, `${where} 友链入口总数应为 12`);
+    assert.strictEqual((nav.match(/<li><a /g) || []).length, 11, `${where} 友链可点击链接应为 11（10 站内 + 1 外部）`);
     assert.ok(
       nav.includes(`<span aria-current="page" class="current">${pair.card.name}</span>`),
       `${where} 当前页应渲染为高亮 span`
     );
     assert.ok(
-      !nav.includes(`href="/card/${pair.slug}.html"`),
+      !nav.includes(`href="${pair.slug}.html"`),
       `${where} 友链不得含指向自身的链接`
     );
-    assert.ok(nav.includes('<a href="/">首页</a>'), `${where} 友链应含首页链接`);
+    assert.ok(nav.includes('<a href="../index.html">首页</a>'), `${where} 友链应含首页回链 ../index.html`);
     const others = pairs.filter((p) => p.slug !== pair.slug);
     assert.strictEqual(others.length, 9);
     for (const other of others) {
       assert.ok(
-        nav.includes(`href="/card/${other.slug}.html"`),
+        nav.includes(`href="${other.slug}.html"`),
         `${where} 友链应含其余子页: ${other.card.name}`
       );
     }
+    // 外部友链：绝对 URL + 新窗口安全属性，位于列表末尾
+    assert.ok(
+      nav.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝</a></li>'),
+      `${where} 友链应含外部友链 jdjdndn.github.io（含安全属性）`
+    );
+  }
+});
+
+test('index.html：底部友情链接共 12 个入口（首页高亮 + 10 子页 + 外部友链）', () => {
+  const nav = friendLinksBlock(indexHtml, 'index.html');
+  assert.strictEqual((nav.match(/<li>/g) || []).length, 12, 'index.html 友链入口总数应为 12');
+  assert.strictEqual((nav.match(/<li><a /g) || []).length, 11, 'index.html 友链可点击链接应为 11');
+  assert.ok(nav.includes('<span aria-current="page" class="current">首页</span>'), '首页应渲染为高亮 span');
+  for (const pair of pairs) {
+    assert.ok(
+      nav.includes(`href="card/${pair.slug}.html"`),
+      `index.html 友链应含子页入口: card/${pair.slug}.html`
+    );
+  }
+  assert.ok(
+    nav.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝</a></li>'),
+    'index.html 友链应含外部友链 jdjdndn.github.io（含安全属性）'
+  );
+});
+
+/* ================================================================== */
+/* 2'. 子页结构增强：速览网格 / 简介 / 办理流程 / 代理卡 / FAQ / 相关推荐 */
+/* ================================================================== */
+
+test('子页结构增强：速览网格四格与 data.js 字段一致（覆盖范围缺失时三格）', () => {
+  for (const { pair, html } of cardPages) {
+    const where = `card/${pair.slug}.html`;
+    const specGrid = html.match(/<dl class="spec-grid">[\s\S]*?<\/dl>/);
+    assert.ok(specGrid, `${where} 应含 <dl class="spec-grid">`);
+
+    const card = pair.card;
+    const expectedCount = typeof card.nationwide === 'boolean' ? 4 : 3;
+    assert.strictEqual(
+      (specGrid[0].match(/<div class="spec-item">/g) || []).length,
+      expectedCount,
+      `${where} 速览格数应为 ${expectedCount}`
+    );
+    assert.ok(specGrid[0].includes(`<dd>${card.name}</dd>`), `${where} 速览应含平台名称 ${card.name}`);
+    assert.ok(specGrid[0].includes(`<dd>${card.priceRange}</dd>`), `${where} 速览应含参考资费`);
+    if (typeof card.nationwide === 'boolean') {
+      assert.ok(specGrid[0].includes(`<dd>${card.nationwide ? '全国通用' : '部分地区'}</dd>`),
+        `${where} 速览覆盖范围应与 nationwide 一致`);
+    } else {
+      assert.ok(!specGrid[0].includes('覆盖范围'), `${where} nationwide 缺失不渲染覆盖范围格`);
+    }
+    assert.ok(
+      specGrid[0].includes(`<dd>${card.badge || '号卡办理'}</dd>`),
+      `${where} 平台特色应为 badge 或回退文案`
+    );
+  }
+});
+
+test('子页结构增强：简介补充句 + 办理流程四步 + 代理合作卡 CTA 逐字符一致', () => {
+  for (const { pair, html } of cardPages) {
+    const where = `card/${pair.slug}.html`;
+
+    // 简介：description 全文 + 通用导航补充句（不编造资费事实）
+    assert.ok(html.includes(pair.card.description), `${where} 简介应含 description 全文`);
+    assert.ok(
+      html.includes('本站收录其官方办理入口与代理申请通道，资费以平台页面实时展示为准。'),
+      `${where} 简介应含通用补充句`
+    );
+
+    // 办理流程：ol.steps 四步固定标题
+    const steps = html.match(/<ol class="steps">[\s\S]*?<\/ol>/);
+    assert.ok(steps, `${where} 应含 <ol class="steps">`);
+    assert.strictEqual((steps[0].match(/<li class="step">/g) || []).length, 4, `${where} 步骤条应含 4 步`);
+    for (const title of ['选择平台', '跳转官方入口', '选号与实名', '收卡激活']) {
+      assert.ok(steps[0].includes(`<h3>${title}</h3>`), `${where} 步骤条应含"${title}"`);
+    }
+
+    // 代理合作卡：代理名 + CTA 与 data.js 代理 URL 逐字符一致且属性安全
+    assert.ok(html.includes('class="agent-card"'), `${where} 应含代理合作卡`);
+    assert.ok(html.includes(`>${pair.proxy.name}</p>`), `${where} 代理卡应展示代理名`);
+    const agentCta = extractAnchors(html).find(
+      (a) => decodeEntities(a.href) === pair.proxy.url && a.tag.includes('agent-card-cta')
+    );
+    assert.ok(agentCta, `${where} 代理卡 CTA 应指向代理 URL: ${pair.proxy.url}`);
+    assertExternalLinkSafety(agentCta.tag, agentCta.href, `${where} 代理卡 CTA`);
+  }
+});
+
+test('子页结构增强：FAQ 4 个 details 条目；相关推荐 9 个平台且排除当前页', () => {
+  for (const { pair, html } of cardPages) {
+    const where = `card/${pair.slug}.html`;
+
+    // FAQ：4 个 details/summary 折叠条目，问题文案为通用四问
+    assert.strictEqual(
+      (html.match(/<details class="faq-item">/g) || []).length, 4,
+      `${where} FAQ 应含 4 个 details 条目`
+    );
+    assert.strictEqual((html.match(/<summary>/g) || []).length, 4, `${where} FAQ summary 数应为 4`);
+    for (const question of ['在这里办理号卡正规吗？', '页面展示的资费准确吗？', '如何申请成为代理？', '本站与号卡平台是什么关系？']) {
+      assert.ok(html.includes(`<summary>${question}</summary>`), `${where} FAQ 应含问题"${question}"`);
+    }
+
+    // 相关推荐：其余 9 个平台，同目录相对互链，排除当前页
+    const related = html.match(/<ul class="related-grid">[\s\S]*?<\/ul>/);
+    assert.ok(related, `${where} 应含 <ul class="related-grid">`);
+    const others = pairs.filter((p) => p.slug !== pair.slug);
+    assert.strictEqual(others.length, 9);
+    assert.strictEqual(
+      (related[0].match(/<li class="related-card">/g) || []).length, 9,
+      `${where} 相关推荐应为 9 个平台`
+    );
+    assert.ok(!related[0].includes(`href="${pair.slug}.html"`), `${where} 相关推荐不得含当前页链接`);
+    for (const other of others) {
+      assert.ok(
+        related[0].includes(`href="${other.slug}.html"`),
+        `${where} 相关推荐应含: card/${other.slug}.html`
+      );
+      assert.ok(
+        related[0].includes(`<h3>${other.card.name}</h3>`),
+        `${where} 相关推荐应含平台名: ${other.card.name}`
+      );
+    }
+    assert.ok(html.includes('其他号卡平台'), `${where} 推荐区 h2 标题`);
   }
 });
 
@@ -320,9 +445,20 @@ test('sitemap.xml：含 11 个 <loc>（首页 + 10 子页，顺序与 data.js �
   }
 });
 
-test('robots.txt：存在、允许全站爬取、声明 sitemap 绝对地址', () => {
+test('robots.txt：存在、允许全站爬取、含 AI 爬虫 GEO 段、声明 sitemap 绝对地址', () => {
   assert.ok(robotsTxt.includes('User-agent: *'), 'robots.txt 应声明 User-agent: *');
   assert.ok(robotsTxt.includes('Allow: /'), 'robots.txt 应允许全站抓取');
+  // AI 爬虫 GEO 段：逐爬虫显式 Allow（GPTBot / ClaudeBot / PerplexityBot / Google-Extended / Bytespider / CCBot）
+  for (const bot of ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'Google-Extended', 'Bytespider', 'CCBot']) {
+    assert.ok(
+      robotsTxt.includes(`User-agent: ${bot}\nAllow: /`),
+      `robots.txt 应显式允许 AI 爬虫: ${bot}`
+    );
+  }
+  assert.ok(
+    robotsTxt.includes('# AI 爬虫允许（GEO / 生成式引擎优化）'),
+    'robots.txt 应含 GEO 段注释'
+  );
   assert.ok(
     robotsTxt.includes('Sitemap: https://haoka17.github.io/sitemap.xml'),
     'robots.txt 应声明 sitemap 绝对地址'
@@ -350,7 +486,81 @@ test('llms.txt：存在且列出全部 11 个页面 URL，URL 集合与 sitemap 
 });
 
 /* ================================================================== */
-/* 5. 产物新鲜度：全部产物与当前源码/数据重新渲染结果一致               */
+/* 5. favicon 与相对路径（file:// 本地打开可用性）                      */
+/* ================================================================== */
+
+test('favicon：11 页均含 4 个 favicon link（首页 assets/ 前缀，子页 ../assets/ 前缀）', () => {
+  const faviconHrefs = (prefix) => [
+    `<link rel="icon" href="${prefix}assets/img/favicon.svg" type="image/svg+xml">`,
+    `<link rel="icon" href="${prefix}assets/img/favicon-32.png" type="image/png" sizes="32x32">`,
+    `<link rel="icon" href="${prefix}assets/img/favicon-16.png" type="image/png" sizes="16x16">`,
+    `<link rel="apple-touch-icon" href="${prefix}assets/img/apple-touch-icon.png">`,
+  ];
+  for (const tag of faviconHrefs('')) {
+    assert.ok(indexHtml.includes(tag), `index.html 应含 favicon link: ${tag}`);
+  }
+  assert.strictEqual(
+    (indexHtml.match(/<link rel="(icon|apple-touch-icon)"/g) || []).length,
+    4,
+    'index.html favicon link 应恰为 4 个'
+  );
+  for (const { pair, html } of cardPages) {
+    const where = `card/${pair.slug}.html`;
+    for (const tag of faviconHrefs('../')) {
+      assert.ok(html.includes(tag), `${where} 应含 favicon link: ${tag}`);
+    }
+    assert.strictEqual(
+      (html.match(/<link rel="(icon|apple-touch-icon)"/g) || []).length,
+      4,
+      `${where} favicon link 应恰为 4 个`
+    );
+  }
+});
+
+test('favicon 文件：4 个图标文件存在且非空，3 个 PNG 均为合法 PNG 魔数', () => {
+  const imgDir = path.join(ROOT, 'assets', 'img');
+  for (const name of ['favicon.svg', 'favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png']) {
+    const abs = path.join(imgDir, name);
+    assert.ok(fs.existsSync(abs), `assets/img/${name} 应存在`);
+    assert.ok(fs.statSync(abs).size > 0, `assets/img/${name} 不应为空文件`);
+  }
+  const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  for (const name of ['favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png']) {
+    const head = fs.readFileSync(path.join(imgDir, name)).subarray(0, 8);
+    assert.ok(
+      head.equals(PNG_MAGIC),
+      `assets/img/${name} 前 8 字节应为 PNG 魔数（89 50 4E 47 0D 0A 1A 0A）`
+    );
+  }
+});
+
+test('相对路径：11 页站内引用均为相对路径，无根绝对 href/src（canonical/og 为 content 属性不受影响）', () => {
+  assert.ok(!/(?:href|src)="\//.test(indexHtml), 'index.html 不应含根绝对路径引用');
+  for (const { pair, html } of cardPages) {
+    assert.ok(
+      !/(?:href|src)="\//.test(html),
+      `card/${pair.slug}.html 不应含根绝对路径引用`
+    );
+  }
+  // 资源引用前缀规则：首页 assets/...；子页 ../assets/...
+  assert.ok(indexHtml.includes('href="assets/css/style.css"'), 'index.html 样式表应为 assets/ 相对路径');
+  assert.ok(indexHtml.includes('src="assets/js/main.js"'), 'index.html 脚本应为 assets/ 相对路径');
+  for (const { pair, html } of cardPages) {
+    const where = `card/${pair.slug}.html`;
+    assert.ok(html.includes('href="../assets/css/style.css"'), `${where} 样式表应为 ../assets/ 相对路径`);
+    assert.ok(html.includes('src="../assets/js/main.js"'), `${where} 脚本应为 ../assets/ 相对路径`);
+    assert.ok(html.includes('href="../index.html"'), `${where} 应回链 ../index.html`);
+    // SEO 绝对 URL 保持不变
+    assert.ok(html.includes(`<link rel="canonical" href="https://haoka17.github.io/card/${pair.slug}.html">`), `${where} canonical 应保持绝对 URL`);
+  }
+  assert.ok(
+    indexHtml.includes('<link rel="canonical" href="https://haoka17.github.io/">'),
+    'index.html canonical 应保持绝对 URL'
+  );
+});
+
+/* ================================================================== */
+/* 6. 产物新鲜度：全部产物与当前源码/数据重新渲染结果一致               */
 /* （归一化动态字段：页脚年份 <span data-year>、sitemap lastmod）      */
 /* ================================================================== */
 
@@ -380,7 +590,7 @@ test('产物新鲜度：11 个 HTML + sitemap + robots + llms.txt 均为当前 d
       description: pair.description,
       canonicalPath: pair.pageUrl,
       jsonLd: cardJsonLd(pair),
-      mainHtml: renderCardMain(pair),
+      mainHtml: renderCardMain(pair, pairs),
       currentSlug: pair.slug,
       pairs,
     });

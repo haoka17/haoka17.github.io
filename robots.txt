@@ -1,4 +1,25 @@
 User-agent: *
 Allow: /
 
+
+# AI 爬虫允许（GEO / 生成式引擎优化）
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+# Sitemap
 Sitemap: https://haoka17.github.io/sitemap.xml
