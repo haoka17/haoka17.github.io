@@ -27,6 +27,9 @@ const {
   indexJsonLd,
   cardJsonLd,
   assertExternalLinks,
+  renderSitemap,
+  renderRobots,
+  renderLlmsTxt,
 } = require('./build.js');
 
 /* ---------- 测试数据工厂 ---------- */
@@ -475,5 +478,156 @@ test('真实 data.js：10 对数据零错误，slug 唯一，11 页 title/descri
       pair.pageUrl,
       `https://haoka17.github.io/card/${pair.slug}.html`
     );
+  }
+});
+
+/* ================================================================== */
+/* 13. 数据完整性（任务 #5：字段存在且类型正确、https 前缀、按序配对）  */
+/* ================================================================== */
+
+test('数据完整性：list 与 proxyList 长度均为 10，10 对平台名按索引一一对应', () => {
+  const { list, proxyList } = loadRealData();
+  assert.strictEqual(list.length, 10, 'list 长度应为 10');
+  assert.strictEqual(proxyList.length, 10, 'proxyList 长度应为 10');
+
+  const expectedNames = [
+    '电信星卡', '172号卡', '好卡新耀', '咔咔通信', '蛋蛋号卡',
+    '灵渠号卡', '青禾号卡', '号易', '卡业联盟', '林夕号卡',
+  ];
+  assert.deepStrictEqual(list.map((c) => c.name), expectedNames, '10 个平台名按 data.js 顺序排列');
+  for (let i = 0; i < expectedNames.length; i += 1) {
+    assert.strictEqual(
+      proxyList[i].name,
+      `${expectedNames[i]}代理`,
+      `第 ${i} 对代理名应符合 "{号卡名}代理" 约定`
+    );
+  }
+});
+
+test('数据完整性：list 每条必填字段存在且类型正确，url 均以 https:// 开头', () => {
+  const { list } = loadRealData();
+  for (let i = 0; i < list.length; i += 1) {
+    const card = list[i];
+    assert.ok(card && typeof card === 'object' && !Array.isArray(card), `list[${i}] 应为对象`);
+    for (const field of ['name', 'url', 'description', 'priceRange']) {
+      assert.strictEqual(
+        typeof card[field], 'string',
+        `list[${i}](${card.name}).${field} 应为字符串`
+      );
+      assert.notStrictEqual(card[field].trim(), '', `list[${i}](${card.name}).${field} 不应为空`);
+    }
+    assert.ok(
+      card.url.startsWith('https://'),
+      `list[${i}](${card.name}).url 应以 https:// 开头，实际: ${card.url}`
+    );
+    if (Object.prototype.hasOwnProperty.call(card, 'nationwide')) {
+      assert.strictEqual(typeof card.nationwide, 'boolean', 'nationwide 若存在必须为 boolean');
+    }
+    if (Object.prototype.hasOwnProperty.call(card, 'badge')) {
+      assert.ok(typeof card.badge === 'string' && card.badge !== '', 'badge 若存在必须为非空字符串');
+    }
+  }
+});
+
+test('数据完整性：proxyList 每条 name/url 存在且类型正确，url 均以 https:// 开头', () => {
+  const { proxyList } = loadRealData();
+  for (let i = 0; i < proxyList.length; i += 1) {
+    const proxy = proxyList[i];
+    assert.ok(proxy && typeof proxy === 'object' && !Array.isArray(proxy), `proxyList[${i}] 应为对象`);
+    for (const field of ['name', 'url']) {
+      assert.strictEqual(typeof proxy[field], 'string', `proxyList[${i}].${field} 应为字符串`);
+      assert.notStrictEqual(proxy[field].trim(), '', `proxyList[${i}].${field} 不应为空`);
+    }
+    assert.ok(
+      proxy.url.startsWith('https://'),
+      `proxyList[${i}](${proxy.name}).url 应以 https:// 开头，实际: ${proxy.url}`
+    );
+  }
+});
+
+/* ================================================================== */
+/* 14. indexMeta（首页 title/description/canonical 生成规则）          */
+/* ================================================================== */
+
+test('indexMeta：首页 title/description/canonical 与 design.md 1.3.5 模板一致', () => {
+  const { list, proxyList } = loadRealData();
+  const meta = indexMeta(toCardPairs(list, proxyList));
+
+  assert.strictEqual(meta.title, '好卡导航 - 精选正规流量卡/号卡平台导航与代理入口');
+  assert.strictEqual(
+    meta.description,
+    '聚合 10 个正规号卡平台官方办理入口与代理申请通道，覆盖电信星卡、172号卡等热门流量卡品牌，' +
+    '附资费区间与适用地区说明，一站比选直达办理。'
+  );
+  assert.ok(meta.description.length <= 160, '首页 description ≤ 160 字符');
+  assert.strictEqual(meta.canonicalPath, 'https://haoka17.github.io/');
+});
+
+/* ================================================================== */
+/* 15. 站点级产物纯函数（renderSitemap / renderRobots / renderLlmsTxt）*/
+/* ================================================================== */
+
+test('renderSitemap：11 个 URL、首页 1.0/子页 0.8、顺序与 data.js 一致、lastmod 透传', () => {
+  const { list, proxyList } = loadRealData();
+  const pairs = toCardPairs(list, proxyList);
+  const xml = renderSitemap(pairs, '2026-01-31');
+
+  assert.ok(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>'), 'XML 声明');
+  assert.ok(xml.includes('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'));
+
+  const locs = Array.from(xml.matchAll(/<loc>([^<]+)<\/loc>/g), (m) => m[1]);
+  assert.strictEqual(locs.length, 11, 'sitemap 应含 11 个 URL（首页 + 10 子页）');
+  assert.strictEqual(locs[0], 'https://haoka17.github.io/', '首页 URL 位于首位');
+  for (let i = 0; i < pairs.length; i += 1) {
+    assert.strictEqual(locs[i + 1], pairs[i].pageUrl, `子页 URL 顺序应与 data.js 一致（第 ${i} 个）`);
+  }
+
+  assert.strictEqual((xml.match(/<priority>1\.0<\/priority>/g) || []).length, 1, '首页 priority 1.0 恰 1 个');
+  assert.strictEqual((xml.match(/<priority>0\.8<\/priority>/g) || []).length, 10, '子页 priority 0.8 共 10 个');
+  assert.strictEqual((xml.match(/<lastmod>2026-01-31<\/lastmod>/g) || []).length, 11, 'lastmod 应透传入参');
+  assert.strictEqual((xml.match(/<changefreq>weekly<\/changefreq>/g) || []).length, 11, 'changefreq 全部 weekly');
+});
+
+test('renderSitemap：不传日期时 lastmod 默认为当天（YYYY-MM-DD 格式）', () => {
+  const { list, proxyList } = loadRealData();
+  const pairs = toCardPairs(list, proxyList);
+  const xml = renderSitemap(pairs);
+  const dates = Array.from(xml.matchAll(/<lastmod>([^<]+)<\/lastmod>/g), (m) => m[1]);
+  assert.strictEqual(dates.length, 11);
+  for (const d of dates) assert.match(d, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('renderRobots：固定文案——允许全站抓取并声明 sitemap 绝对地址', () => {
+  assert.strictEqual(
+    renderRobots(),
+    'User-agent: *\nAllow: /\n\nSitemap: https://haoka17.github.io/sitemap.xml\n'
+  );
+});
+
+test('renderLlmsTxt：11 个页面 URL 与 sitemap 完全一致，子页行含平台名与资费', () => {
+  const { list, proxyList } = loadRealData();
+  const pairs = toCardPairs(list, proxyList);
+  const llms = renderLlmsTxt(pairs);
+
+  assert.ok(llms.startsWith('# 好卡导航\n'), 'H1 站名开头');
+  assert.ok(llms.includes('## 站点页面'), '站点页面章节');
+  assert.ok(llms.includes('## 说明'), '边界声明章节');
+
+  const llmsUrls = Array.from(llms.matchAll(/\((https:\/\/haoka17\.github\.io\/[^)\s]*)\)/g), (m) => m[1]);
+  const sitemapLocs = Array.from(
+    renderSitemap(pairs).matchAll(/<loc>([^<]+)<\/loc>/g), (m) => m[1]
+  );
+  assert.deepStrictEqual(
+    [...new Set(llmsUrls)].sort(),
+    [...new Set(sitemapLocs)].sort(),
+    'llms.txt URL 集合应与 sitemap 完全一致（11 个）'
+  );
+
+  for (const pair of pairs) {
+    const lineStart = llms.indexOf(`- [${pair.card.name}](${pair.pageUrl}):`);
+    assert.ok(lineStart >= 0, `llms.txt 应含 ${pair.card.name} 页面行`);
+    const lineEnd = llms.indexOf('\n', lineStart);
+    const line = llms.slice(lineStart, lineEnd === -1 ? llms.length : lineEnd);
+    assert.ok(line.includes(pair.card.priceRange), `${pair.card.name} 行应含资费区间`);
   }
 });
