@@ -294,7 +294,7 @@ img { max-width: 100%; height: auto; }
 .proxy-section h2 { color: #fff; margin-bottom: 8px; }
 .proxy-desc {
   margin: 0 0 24px;
-  color: var(--color-footer-text);
+  color: #A8B6C9;                   /* 渐变最深端 #312E81 上对比度 5.5:1 ≥ 4.5（NFR-19） */
 }
 
 .proxy-grid {
