@@ -10,6 +10,8 @@ haoka17.github.io/                # 仓库根 = 站点根（GitHub Pages 用户�
 ├── scripts/
 │   ├── build.js                  # 构建脚本（Node.js ≥18，零第三方依赖）
 │   └── build.test.js             # 构建逻辑单测（node:test 内置框架）
+├── tests/
+│   └── artifacts.test.js         # 产物集成断言（10 个用例，需先构建产物）
 ├── index.html                    # 首页（构建产物，提交仓库）
 ├── card/                         # 10 个子页（构建产物，构建时先清理再全量生成）
 │   ├── dianxin-xingka.html       #   电信星卡
@@ -72,10 +74,17 @@ git add -A && git commit -m "chore: rebuild site"
 
 ```bash
 # node:test 内置框架，零依赖，Node ≥ 18
-node --test scripts/build.test.js
+# 自动发现 scripts/ 与 tests/ 下全部 *.test.js
+node --test
+
+# 或指定文件运行
+node --test scripts/build.test.js tests/artifacts.test.js
 ```
 
-覆盖：数据校验契约（E1~E10 错误码）、索引配对、slug 派生与快照、友链导航（11 入口/10 链接）、SEO 元数据唯一性、外链安全属性、JSON-LD 结构、priceRange 解析等 19 个用例。
+共 37 个用例，分两层：
+
+- `scripts/build.test.js`（27 个，构建逻辑单元测试）：数据校验契约（E1~E10 错误码）、索引配对、slug 派生与快照、友链导航（11 入口/10 链接）、SEO 元数据生成与唯一性、外链安全属性、JSON-LD 结构、priceRange 解析、数据完整性（10 对按序配对、字段类型、https 前缀）、首页 title/description 模板、sitemap/robots/llms.txt 生成规则。
+- `tests/artifacts.test.js`（10 个，产物集成断言，前置：产物已由 `node scripts/build.js` 生成）：index.html 含 10 个号卡名与 10 个代理链接、子页双 CTA 外链 href 与 data.js 逐字符一致（含长查询参数）、友情链接排除自身且当前页高亮、11 页独立 title/description/canonical/JSON-LD 且两两唯一、sitemap 11 个 `<loc>` 均对应实际文件、robots.txt 允许爬取、llms.txt 列出全部页面、产物新鲜度（全部产物与重新渲染结果一致）。
 
 ## 约定速查
 

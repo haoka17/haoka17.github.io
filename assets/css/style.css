@@ -17,6 +17,7 @@
   --color-border: #E2E8F0;           /* 边框、分割线 */
   --color-footer-bg: #0F172A;        /* 页脚深色底 */
   --color-footer-text: #94A3B8;      /* 页脚文字 */
+  --color-footer-current: #60A5FA;   /* 页脚当前页高亮（深底对比度 7.0:1，NFR-19） */
   --radius-card: 12px;               /* 卡片圆角 */
   --radius-btn: 8px;                 /* 按钮圆角 */
   --header-h: 64px;                  /* 吸顶栏高度 */
@@ -92,6 +93,9 @@ img { max-width: 100%; height: auto; }
 }
 
 .logo {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;                 /* 触控目标 ≥44×44（spec NFR-17） */
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-primary);
@@ -101,9 +105,12 @@ img { max-width: 100%; height: auto; }
 .logo:hover { color: var(--color-primary-hover); }
 
 .site-header nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;                 /* 触控目标 ≥44×44（spec NFR-17） */
   color: var(--color-text);
   text-decoration: none;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-radius: var(--radius-btn);
   transition: color 0.2s ease, background-color 0.2s ease;
 }
@@ -112,7 +119,10 @@ img { max-width: 100%; height: auto; }
   background-color: var(--color-primary-light);
 }
 .nav-current {
-  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
   color: var(--color-text-secondary);
   cursor: default;             /* 当前位置，非链接 */
 }
@@ -193,9 +203,9 @@ img { max-width: 100%; height: auto; }
   color: #fff;
   line-height: 1.5;
 }
-.badge-hot     { background: #F59E0B; }
-.badge-new     { background: #06B6D4; }
-.badge-quad    { background: #3B82F6; }
+.badge-hot     { background: #B45309; }   /* 深琥珀：白字对比度 5.0:1（spec NFR-19 徽章 ≥3:1） */
+.badge-new     { background: #0E7490; }   /* 深青：白字对比度 5.4:1 */
+.badge-quad    { background: #3B82F6; }   /* 白字对比度 3.7:1 ✓ */
 .badge-default { background: #64748B; }
 
 .card-title {
@@ -246,10 +256,12 @@ img { max-width: 100%; height: auto; }
 .card-cta {
   position: relative;               /* 置于 stretched link 之上，保持可点击 */
   z-index: 1;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;                 /* 触控目标 ≥44×44（spec NFR-17） */
   background: var(--color-primary);
   color: #fff;
-  padding: 8px 16px;
+  padding: 10px 16px;
   border-radius: var(--radius-btn);
   text-decoration: none;
   font-size: 0.875rem;
@@ -295,11 +307,14 @@ img { max-width: 100%; height: auto; }
 }
 .proxy-grid li { display: block; }
 .proxy-link {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;                 /* 触控目标 ≥44×44（spec NFR-17） */
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: var(--radius-btn);
-  padding: 8px 12px;
+  padding: 10px 12px;
   color: #E9D5FF;
   text-decoration: none;
   font-size: 0.875rem;
@@ -456,7 +471,7 @@ img { max-width: 100%; height: auto; }
   color: #E2E8F0;
 }
 
-/* 11 入口：flex wrap，间隔 16px，移动端自动换行 */
+/* 11 入口：flex wrap，间隔 16px，移动端自动换行；触控目标 ≥44px（NFR-17） */
 .friend-links ul {
   list-style: none;
   margin: 0;
@@ -466,6 +481,9 @@ img { max-width: 100%; height: auto; }
   gap: 16px;
 }
 .friend-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;                 /* 触控目标 ≥44×44（spec NFR-17） */
   color: var(--color-footer-text);
   text-decoration: none;
   font-size: 0.875rem;
@@ -476,9 +494,12 @@ img { max-width: 100%; height: auto; }
   color: #fff;
   text-decoration: underline;
 }
-/* 当前页：非链接 + 高亮（排除自链接） */
+/* 当前页：非链接 + 高亮（排除自链接）；与链接同高对齐，深底专用高亮蓝保证对比度 */
 .friend-links .current {
-  color: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--color-footer-current);
   font-weight: 600;
   font-size: 0.875rem;
 }
@@ -508,7 +529,7 @@ img { max-width: 100%; height: auto; }
 
   /* header 单行自适应 */
   .logo { font-size: 1.125rem; }
-  .site-header nav a, .nav-current { padding: 8px 8px; }
+  .site-header nav a, .nav-current { padding: 10px 8px; }
 
   .card-detail { padding: 24px 0; min-height: 0; }
   .card-detail-inner { padding: 24px 16px; }
