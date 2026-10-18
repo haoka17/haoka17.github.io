@@ -401,7 +401,7 @@ test('renderFooterNav：当前页为 span[aria-current]，其余为 <a>，末尾
 
   // 外部友链：绝对 URL + 新窗口安全属性，渲染在列表末尾
   assert.ok(
-    html.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝</a></li>'),
+     html.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝 ↗</a></li>'),
     '末尾应含外部友链 jdjdndn.github.io（含 target=_blank rel=noopener noreferrer）'
   );
   const externalItem = html.indexOf('https://jdjdndn.github.io/');

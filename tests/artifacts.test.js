@@ -210,7 +210,7 @@ test('子页：底部友情链接共 12 个入口（排除自身 + 外部友链�
     }
     // 外部友链：绝对 URL + 新窗口安全属性，位于列表末尾
     assert.ok(
-      nav.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝</a></li>'),
+      nav.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝 ↗</a></li>'),
       `${where} 友链应含外部友链 jdjdndn.github.io（含安全属性）`
     );
   }
@@ -228,7 +228,7 @@ test('index.html：底部友情链接共 12 个入口（首页高亮 + 10 子页
     );
   }
   assert.ok(
-    nav.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝</a></li>'),
+    nav.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝 ↗</a></li>'),
     'index.html 友链应含外部友链 jdjdndn.github.io（含安全属性）'
   );
 });
