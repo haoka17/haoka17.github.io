@@ -26,6 +26,11 @@ const {
   renderLayout,
   renderIndexMain,
   renderCardMain,
+  renderNotice,
+  NOTICE_TITLE,
+  NOTICE_LEAD,
+  NOTICE_CONTACT,
+  NOTICE_ITEMS,
   cardFaqs,
   indexJsonLd,
   cardJsonLd,
@@ -236,6 +241,71 @@ test('renderIndexMain：badge/价格/覆盖标签/双链接/代理区；E8 缺�
   assert.ok(html.includes('href="card/test-a.html"'));
   // 代理合作区：仅代理链接，不含号卡办理链接（design.md 2.1 外链跳转约定）
   assert.ok(html.includes('代理合作入口') && html.includes('测试卡A代理'));
+});
+
+/* ================================================================== */
+/* 5'. 号卡注意事项公告区块（renderNotice 纯函数 + 两视角复用）        */
+/* ================================================================== */
+
+test('renderNotice：结构骨架 + 6 条固定文案 + 联系方式；纯静态无链接', () => {
+  const html = renderNotice();
+
+  // 骨架：section[aria-labelledby] > .container > .notice-card
+  assert.ok(html.startsWith('<section class="notice-section" aria-labelledby="notice-title">'));
+  assert.ok(html.includes('<div class="container">'));
+  assert.ok(html.includes('<div class="notice-card">'));
+  assert.ok(html.includes(`<h2 id="notice-title">📢 ${NOTICE_TITLE}</h2>`));
+  assert.ok(html.includes(`<p class="notice-lead">${NOTICE_LEAD}</p>`));
+
+  // 6 条文案逐条渲染
+  for (const item of NOTICE_ITEMS) {
+    assert.ok(html.includes(`<li>${item}</li>`), `公告列表应含: ${item.slice(0, 15)}…`);
+  }
+  assert.strictEqual((html.match(/<li>/g) || []).length, NOTICE_ITEMS.length, '公告列表条数应与 NOTICE_ITEMS 一致');
+
+  // 联系方式
+  assert.ok(html.includes(`<p class="notice-contact">如有疑问可联系站长，${NOTICE_CONTACT}</p>`));
+
+  // 纯静态：无任何链接与 href/src 引用
+  assert.ok(!html.includes('<a '), '公告区块不应含链接');
+  assert.ok(!/(?:href|src)="/.test(html), '公告区块不应含 href/src 引用');
+});
+
+test('NOTICE 常量快照：6 条注意事项文案与事实数字、引导语、联系方式逐字符一致', () => {
+  assert.strictEqual(NOTICE_TITLE, '号卡注意事项');
+  assert.strictEqual(NOTICE_LEAD, '下单前请仔细阅读平台详情页，重点关注套餐内容与优惠期。');
+  assert.strictEqual(NOTICE_CONTACT, '微信：wcbbll');
+  assert.deepStrictEqual(NOTICE_ITEMS, [
+    '各平台内均有订单查询与在线客服，遇到问题直接联系平台客服即可。请记住下单的平台网站，售后不要走错地方。',
+    '一般号卡在 24-48 小时内发货；特殊卡（需上传三证/四证、先激活后发货、预存话费的）审核较慢，一般需要 3-5 天。',
+    '号卡归属地均为随机分配，不可指定。',
+    '根据工信部规定：个人在同一运营商 30 天内只能办理一张卡；同一运营商名下最多可办理 5 张实名制手机卡；四大运营商合计不超过 10 张。',
+    '申请时缴纳的费用：申请成功后自动转为话费；申请失败将全额退回。',
+    '办卡失败可拨打运营商官方客服热线查询：移动 10086、联通 10010、电信 10000、广电 10099，或联系平台在线客服。',
+  ]);
+});
+
+test('公告区块复用：首页 hero 后 / 子页详情后插入，且两视角输出完全一致', () => {
+  const { current, pairs } = makeCardMainPairs();
+
+  const indexHtml = renderIndexMain(pairs);
+  assert.ok(indexHtml.includes('<section class="notice-section"'), '首页应内嵌公告区块');
+  const heroPos = indexHtml.indexOf('<section class="hero">');
+  const idxNoticePos = indexHtml.indexOf('<section class="notice-section"');
+  const cardSectionPos = indexHtml.indexOf('<section class="card-section"');
+  assert.ok(idxNoticePos > heroPos && cardSectionPos > idxNoticePos, '首页：hero < notice < card-section');
+
+  const cardHtml = renderCardMain(current, pairs);
+  assert.ok(cardHtml.includes('<section class="notice-section"'), '子页应内嵌公告区块');
+  const detailPos = cardHtml.indexOf('<section class="card-detail">');
+  const subNoticePos = cardHtml.indexOf('<section class="notice-section"');
+  const extraPos = cardHtml.indexOf('<section class="card-extra">');
+  assert.ok(subNoticePos > detailPos && extraPos > subNoticePos, '子页：card-detail < notice < card-extra');
+
+  // 首页/子页复用同一 renderNotice 输出（逐字符一致）
+  const idxNotice = indexHtml.match(/<section class="notice-section"[\s\S]*?<\/section>/)[0];
+  const cardNotice = cardHtml.match(/<section class="notice-section"[\s\S]*?<\/section>/)[0];
+  assert.strictEqual(idxNotice, cardNotice, '首页/子页公告区块输出应完全一致');
 });
 
 /* ================================================================== */

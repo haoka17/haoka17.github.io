@@ -72,6 +72,22 @@ const CARD_STEPS = [
   { title: '收卡激活', desc: '等待收到号卡后，按平台指引激活即可正常使用' },
 ];
 
+/**
+ * 号卡注意事项公告区块文案（用户给定文案，事实数字不得改动）。
+ * 区块完全静态、不含链接与站内相对引用，首页/子页复用同一渲染。
+ */
+const NOTICE_TITLE = '号卡注意事项';
+const NOTICE_LEAD = '下单前请仔细阅读平台详情页，重点关注套餐内容与优惠期。';
+const NOTICE_CONTACT = '微信：wcbbll';
+const NOTICE_ITEMS = [
+  '各平台内均有订单查询与在线客服，遇到问题直接联系平台客服即可。请记住下单的平台网站，售后不要走错地方。',
+  '一般号卡在 24-48 小时内发货；特殊卡（需上传三证/四证、先激活后发货、预存话费的）审核较慢，一般需要 3-5 天。',
+  '号卡归属地均为随机分配，不可指定。',
+  '根据工信部规定：个人在同一运营商 30 天内只能办理一张卡；同一运营商名下最多可办理 5 张实名制手机卡；四大运营商合计不超过 10 张。',
+  '申请时缴纳的费用：申请成功后自动转为话费；申请失败将全额退回。',
+  '办卡失败可拨打运营商官方客服热线查询：移动 10086、联通 10010、电信 10000、广电 10099，或联系平台在线客服。',
+];
+
 /** 平台特色 badge 缺失时的速览回退文案（E8 降级） */
 const SPEC_BADGE_FALLBACK = '号卡办理';
 
@@ -507,6 +523,30 @@ function renderAreaTag(nationwide) {
 }
 
 /**
+ * 渲染"号卡注意事项"公告区块（首页 hero 之后 / 子页 CTA 区块之后插入，显眼位置）。
+ * 区块完全静态、不含任何链接与站内相对引用，首页/子页两个视角复用同一输出；
+ * 全部文案经 escapeHtml() 转义。
+ * @returns {string}
+ */
+function renderNotice() {
+  const items = NOTICE_ITEMS
+    .map((item) => `      <li>${escapeHtml(item)}</li>`)
+    .join('\n');
+  return `<section class="notice-section" aria-labelledby="notice-title">
+  <div class="container">
+    <div class="notice-card">
+      <h2 id="notice-title">📢 ${escapeHtml(NOTICE_TITLE)}</h2>
+      <p class="notice-lead">${escapeHtml(NOTICE_LEAD)}</p>
+      <ol class="notice-list">
+${items}
+      </ol>
+      <p class="notice-contact">如有疑问可联系站长，${escapeHtml(NOTICE_CONTACT)}</p>
+    </div>
+  </div>
+</section>`;
+}
+
+/**
  * 渲染首页 main 区：hero + 号卡卡片网格 + 代理合作入口区。
  * @param {CardPair[]} pairs
  * @returns {string}
@@ -545,6 +585,7 @@ function renderIndexMain(pairs) {
     <p class="hero-meta">覆盖 ${n} 个平台 · ${priceSegment} · 全国可办</p>
   </div>
 </section>
+${renderNotice()}
 <section class="card-section" aria-labelledby="card-section-title">
   <div class="container">
     <h2 id="card-section-title">号卡平台</h2>
@@ -672,6 +713,7 @@ ${relatedItems}
     <p class="note">跳转至外部平台，本站不直接售卡</p>
   </div>
 </section>
+${renderNotice()}
 <section class="card-extra">
   <div class="container">
     <section class="extra-block">
@@ -1309,6 +1351,10 @@ module.exports = {
   ROOT,
   EXTERNAL_FRIEND_LINKS,
   CARD_STEPS,
+  NOTICE_TITLE,
+  NOTICE_LEAD,
+  NOTICE_CONTACT,
+  NOTICE_ITEMS,
   escapeHtml,
   isValidHttpUrl,
   slugOf,
@@ -1320,6 +1366,7 @@ module.exports = {
   renderFooterNav,
   renderIndexMain,
   renderCardMain,
+  renderNotice,
   cardFaqs,
   indexJsonLd,
   cardJsonLd,

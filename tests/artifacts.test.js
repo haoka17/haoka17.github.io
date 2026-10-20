@@ -38,6 +38,10 @@ const {
   renderSitemap,
   renderRobots,
   renderLlmsTxt,
+  NOTICE_TITLE,
+  NOTICE_LEAD,
+  NOTICE_CONTACT,
+  NOTICE_ITEMS,
 } = require(path.join(ROOT, 'scripts', 'build.js'));
 
 /* ---------- 被测产物与派生数据 ---------- */
@@ -330,6 +334,73 @@ test('子页结构增强：FAQ 4 个 details 条目；相关推荐 9 个平台�
       );
     }
     assert.ok(html.includes('其他号卡平台'), `${where} 推荐区 h2 标题`);
+  }
+});
+
+/* ================================================================== */
+/* 2''. 号卡注意事项公告区块（首页 hero 后 / 子页 CTA 后，11 页复用）   */
+/* ================================================================== */
+
+test('注意事项公告：11 页均含 notice-section、6 条固定文案与联系方式 wcbbll', () => {
+  const allPages = [
+    { rel: 'index.html', html: indexHtml },
+    ...cardPages.map(({ pair, html }) => ({ rel: `card/${pair.slug}.html`, html })),
+  ];
+  assert.strictEqual(allPages.length, 11);
+
+  for (const { rel, html } of allPages) {
+    // 区块骨架：section[aria-labelledby] + 容器 + 标题 + 引导语 + 列表 + 联系方式
+    const section = html.match(/<section class="notice-section"[\s\S]*?<\/section>/);
+    assert.ok(section, `${rel} 应含 notice-section 区块`);
+    assert.ok(
+      html.includes('<section class="notice-section" aria-labelledby="notice-title">'),
+      `${rel} notice-section 应以 aria-labelledby 关联标题`
+    );
+    assert.ok(
+      html.includes(`<h2 id="notice-title">📢 ${NOTICE_TITLE}</h2>`),
+      `${rel} 应含公告标题（h2#notice-title）`
+    );
+    assert.ok(
+      html.includes(`<p class="notice-lead">${NOTICE_LEAD}</p>`),
+      `${rel} 应含引导语 notice-lead`
+    );
+
+    // 6 条固定文案逐条渲染（事实数字不得改动）
+    const list = section[0].match(/<ol class="notice-list">[\s\S]*?<\/ol>/);
+    assert.ok(list, `${rel} 应含 <ol class="notice-list">`);
+    const items = Array.from(list[0].matchAll(/<li>([\s\S]*?)<\/li>/g), (m) => m[1]);
+    assert.strictEqual(items.length, NOTICE_ITEMS.length, `${rel} 公告列表应为 ${NOTICE_ITEMS.length} 条`);
+    for (const item of NOTICE_ITEMS) {
+      assert.ok(section[0].includes(item), `${rel} 公告应含注意事项: ${item.slice(0, 20)}…`);
+    }
+
+    // 联系方式：站长微信号 wcbbll
+    assert.ok(
+      html.includes(`<p class="notice-contact">如有疑问可联系站长，${NOTICE_CONTACT}</p>`),
+      `${rel} 应含站长联系方式（notice-contact）`
+    );
+    assert.ok(section[0].includes('wcbbll'), `${rel} 公告应含微信号 wcbbll`);
+
+    // 公告区块为纯静态信息：不含任何链接与站内相对引用（不破坏 file:// 可用性）
+    assert.ok(!section[0].includes('<a '), `${rel} 公告区块不应含链接`);
+  }
+});
+
+test('注意事项公告插入位置：首页 hero 之后卡片网格之前；子页 CTA 之后 card-extra 之前', () => {
+  // 首页：hero < notice-section < card-section
+  const heroPos = indexHtml.indexOf('<section class="hero">');
+  const noticePos = indexHtml.indexOf('<section class="notice-section"');
+  const cardSectionPos = indexHtml.indexOf('<section class="card-section"');
+  assert.ok(heroPos > -1 && noticePos > heroPos, '首页公告应位于 hero 之后');
+  assert.ok(cardSectionPos > noticePos, '首页公告应位于"号卡平台"卡片网格之前');
+
+  for (const { pair, html } of cardPages) {
+    const where = `card/${pair.slug}.html`;
+    const detailPos = html.indexOf('<section class="card-detail">');
+    const subNoticePos = html.indexOf('<section class="notice-section"');
+    const extraPos = html.indexOf('<section class="card-extra">');
+    assert.ok(detailPos > -1 && subNoticePos > detailPos, `${where} 公告应位于平台详情 CTA 区块之后`);
+    assert.ok(extraPos > subNoticePos, `${where} 公告应位于 card-extra 扩展区之前`);
   }
 });
 

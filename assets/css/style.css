@@ -151,6 +151,46 @@ img { max-width: 100%; height: auto; }
   color: var(--color-text-secondary);
 }
 
+/* ---------- 号卡注意事项公告（琥珀警示色系，与蓝紫主调形成对比；首页/子页复用） ---------- */
+.notice-section { padding: 32px 0; }
+
+.notice-card {
+  background: #FFFBEB;               /* 琥珀浅底（与 .tag-region 同源） */
+  border: 1px solid #F59E0B;         /* 琥珀边框；左侧加粗强调公告属性 */
+  border-left-width: 4px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 28px 32px;
+}
+
+.notice-card h2 {
+  margin: 0 0 12px;
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
+  font-weight: 650;
+  color: #92400E;                    /* 深琥珀标题：#FFFBEB 底对比度 ≈ 8.9:1（NFR-19） */
+}
+
+.notice-lead {
+  margin: 0 0 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.notice-list {
+  margin: 0;
+  padding-left: 24px;
+  display: grid;
+  gap: 8px;
+  color: var(--color-text);
+}
+.notice-list li::marker { color: #B45309; font-weight: 700; }
+
+.notice-contact {
+  margin: 16px 0 0;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
 /* ---------- 号卡卡片网格（桌面 3 列 / ≥1440px 大屏 4 列 / ≤1023 平板 2 / ≤767 移动 1） ---------- */
 .card-section { padding: 48px 0 24px; }
 
@@ -757,6 +797,11 @@ img { max-width: 100%; height: auto; }
   .extra-block { margin-bottom: 40px; }
   .related-section { padding: 0 0 48px; }
 
+  /* 注意事项公告：移动端收紧留白 */
+  .notice-section { padding: 24px 0; }
+  .notice-card { padding: 20px; }
+  .notice-list { padding-left: 20px; }
+
   /* 代理合作卡：纵向堆叠，CTA 全宽（.btn 全宽规则见下） */
   .agent-card { flex-direction: column; align-items: stretch; }
 
@@ -780,4 +825,9 @@ img { max-width: 100%; height: auto; }
   .related-card    { padding: 20px; }                /* 微调：与 card-inner 同步紧凑 */
   .step            { padding: 16px; }
   .agent-card      { padding: 20px; }
+
+  /* 注意事项公告：特小屏进一步紧凑 */
+  .notice-section  { padding: 16px 0; }
+  .notice-card     { padding: 16px; }
+  .notice-list     { gap: 6px; padding-left: 18px; }
 }
