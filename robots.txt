@@ -1,23 +1,21 @@
 User-agent: *
 Allow: /
 
-
-# AI 爬虫允许（GEO / 生成式引擎优化）
+# 放行主流AI爬虫
 User-agent: GPTBot
 Allow: /
-
+User-agent: OAI-SearchBot
+Allow: /
 User-agent: ClaudeBot
 Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
 User-agent: Google-Extended
 Allow: /
-
 User-agent: Bytespider
 Allow: /
-
+User-agent: PerplexityBot
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
 User-agent: CCBot
 Allow: /
 
