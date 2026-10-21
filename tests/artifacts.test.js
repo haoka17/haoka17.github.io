@@ -442,6 +442,12 @@ test('SEO：11 页均有独立 <title>、meta description、canonical、JSON-LD�
     assert.ok(!descs.has(descMatch[1]), `description 应全站唯一: ${descMatch[1].slice(0, 30)}…`);
     descs.add(descMatch[1]);
 
+    // keywords：非空、≤100 字符（SEO 规范）
+    const kwMatch = page.html.match(/<meta name="keywords" content="([^"]*)"/);
+    assert.ok(kwMatch, `${page.rel} 应含 meta keywords`);
+    assert.ok(kwMatch[1].trim().length > 0, `${page.rel} meta keywords 不应为空`);
+    assert.ok(kwMatch[1].length <= 100, `${page.rel} meta keywords ${kwMatch[1].length} 字符，超过 100 上限`);
+
     assert.ok(
       page.html.includes(`<link rel="canonical" href="${page.canonical}">`),
       `${page.rel} canonical 应为页面绝对 URL: ${page.canonical}`
@@ -644,6 +650,7 @@ test('产物新鲜度：11 个 HTML + sitemap + robots + llms.txt 均为当前 d
   const expectedIndex = renderLayout({
     title: meta.title,
     description: meta.description,
+    keywords: meta.keywords,
     canonicalPath: meta.canonicalPath,
     jsonLd: indexJsonLd(pairs),
     mainHtml: renderIndexMain(pairs),
@@ -659,6 +666,7 @@ test('产物新鲜度：11 个 HTML + sitemap + robots + llms.txt 均为当前 d
     const expected = renderLayout({
       title: pair.title,
       description: pair.description,
+      keywords: pair.keywords,
       canonicalPath: pair.pageUrl,
       jsonLd: cardJsonLd(pair),
       mainHtml: renderCardMain(pair, pairs),

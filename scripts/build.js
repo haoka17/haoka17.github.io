@@ -101,6 +101,8 @@ const AGENT_CARD_DESC = '有意代理推广？直达该平台代理申请通道�
 const DESC_SLICE = 70;
 /** meta title / description 最大长度 */
 const META_MAX_LENGTH = 160;
+/** meta keywords 最大长度（SEO 规范：不超过 100 字符） */
+const KEYWORDS_MAX_LENGTH = 100;
 
 /**
  * 号卡平台条目（data.js 导出数组 list 的元素）
@@ -130,6 +132,7 @@ const META_MAX_LENGTH = 160;
  * @property {string}    pageUrl     `${SITE.baseUrl}/card/${slug}.html`
  * @property {string}    title       子页 <title>
  * @property {string}    description 子页 meta description（70 字截取规则）
+ * @property {string}    keywords    子页 meta keywords（≤100 字符）
  * @property {{low:number, high:number} | null} price parsePriceRange() 派生，null 时 JSON-LD 省略 offers
  */
 
@@ -356,6 +359,34 @@ function parsePriceRange(priceRange) {
 }
 
 /**
+ * 派生子页 meta keywords（≤100 字符，SEO 规范）。
+ * 组合：平台流量卡 / 平台办理入口 / 资费区间流量卡 + 通用导航词，逗号分隔。
+ * @param {CardItem} card
+ * @returns {string}
+ */
+function cardKeywords(card) {
+  const terms = [
+    `${card.name}流量卡`,
+    `${card.name}办理入口`,
+    card.priceRange ? `${card.priceRange}流量卡` : null,
+    '正规流量卡',
+    '流量卡资费',
+    '号卡代理申请',
+    '流量卡办理',
+  ].filter(Boolean);
+  let keywords = terms.join(',');
+  if (keywords.length > KEYWORDS_MAX_LENGTH) {
+    // 兜底截断到 ≤100 字符（按完整词保留，避免切词）
+    while (keywords.length > KEYWORDS_MAX_LENGTH) {
+      const parts = keywords.split(',');
+      parts.pop();
+      keywords = parts.join(',');
+    }
+  }
+  return keywords;
+}
+
+/**
  * 按数组索引配对并派生页面元数据（唯一稳定配对机制 = 索引）。
  * 调用前提：validateData 已通过（slug 必然可派生）。
  * @param {CardItem[]} list
@@ -378,11 +409,12 @@ function toCardPairs(list, proxyList) {
       description:
         `${card.name}流量卡资费 ${card.priceRange}，` +
         `${card.description.slice(0, DESC_SLICE)}。提供官方办理入口与代理申请通道。`,
+      keywords: cardKeywords(card),
     };
   });
 }
 
-/** 首页元数据（title/description/canonical，design.md 1.3.5 模板） */
+/** 首页元数据（title/description/canonical/keywords，design.md 1.3.5 模板） */
 function indexMeta(pairs) {
   const n = pairs.length;
   return {
@@ -391,6 +423,8 @@ function indexMeta(pairs) {
       `聚合 ${n} 个正规号卡平台官方办理入口与代理申请通道，` +
       '覆盖电信星卡、172号卡等热门流量卡品牌，附资费区间与适用地区说明，一站比选直达办理。',
     canonicalPath: `${SITE.baseUrl}/`,
+    keywords:
+      '好卡导航,流量卡导航,正规流量卡,流量卡办理,号卡平台,号卡代理,流量卡资费,流量卡申请,号卡比选',
   };
 }
 
@@ -446,13 +480,13 @@ function renderFooterNav(currentSlug, pairs) {
 
 /**
  * 通用布局骨架：head（SEO/OG/JSON-LD 全集）+ header + main + footer。
- * @param {{title: string, description: string, canonicalPath: string,
+ * @param {{title: string, description: string, keywords: string, canonicalPath: string,
  *          jsonLd: object, mainHtml: string, currentSlug: string,
  *          pairs: CardPair[]}} page
  * @returns {string} 完整 HTML 文档
  */
 function renderLayout(page) {
-  const { title, description, canonicalPath, jsonLd, mainHtml, currentSlug, pairs } = page;
+  const { title, description, keywords, canonicalPath, jsonLd, mainHtml, currentSlug, pairs } = page;
   const year = new Date().getFullYear();
   const jsonLdText = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
   // 站内静态资源/互链前缀：首页位于站点根（''），子页位于 card/ 目录（'../'），
@@ -467,6 +501,7 @@ function renderLayout(page) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeHtml(description)}">
+<meta name="keywords" content="${escapeHtml(keywords)}">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="${escapeHtml(canonicalPath)}">
 <meta property="og:type" content="website">
@@ -946,8 +981,9 @@ function assertExternalLinks(pageName, html, errors) {
 }
 
 /**
- * 断言全部页面 title/description 两两唯一且长度合规（FR-19）。
- * @param {{page: string, title: string, description: string}[]} metas
+ * 断言全部页面 title/description 两两唯一且长度合规（FR-19），
+ * 并校验 keywords 非空且 ≤100 字符（SEO 规范）。
+ * @param {{page: string, title: string, description: string, keywords: string}[]} metas
  * @param {string[]} errors
  */
 function assertMetaUniqueness(metas, errors) {
@@ -971,6 +1007,11 @@ function assertMetaUniqueness(metas, errors) {
     }
     if (meta.description.length > META_MAX_LENGTH) {
       errors.push(`错误: ${meta.page} description 超过 ${META_MAX_LENGTH} 字符（当前 ${meta.description.length}）`);
+    }
+    if (typeof meta.keywords !== 'string' || meta.keywords.trim() === '') {
+      errors.push(`错误: ${meta.page} keywords 缺失或为空`);
+    } else if (meta.keywords.length > KEYWORDS_MAX_LENGTH) {
+      errors.push(`错误: ${meta.page} keywords 超过 ${KEYWORDS_MAX_LENGTH} 字符（当前 ${meta.keywords.length}）`);
     }
   }
 }
@@ -1076,6 +1117,7 @@ function main() {
       content: renderLayout({
         title: meta.title,
         description: meta.description,
+        keywords: meta.keywords,
         canonicalPath: meta.canonicalPath,
         jsonLd: indexJsonLd(pairs),
         mainHtml: renderIndexMain(pairs),
@@ -1089,6 +1131,7 @@ function main() {
         content: renderLayout({
           title: pair.title,
           description: pair.description,
+          keywords: pair.keywords,
           canonicalPath: pair.pageUrl,
           jsonLd: cardJsonLd(pair),
           mainHtml: renderCardMain(pair, pairs),
@@ -1111,11 +1154,12 @@ function main() {
   // ---- 写盘前断言：元数据唯一性 + 外链安全 + 产物数量 ----
   const assertErrors = [];
   assertMetaUniqueness([
-    { page: 'index.html', title: meta.title, description: meta.description },
+    { page: 'index.html', title: meta.title, description: meta.description, keywords: meta.keywords },
     ...pairs.map((pair) => ({
       page: `card/${pair.slug}.html`,
       title: pair.title,
       description: pair.description,
+      keywords: pair.keywords,
     })),
   ], assertErrors);
   for (const artifact of artifacts) {
@@ -1225,6 +1269,7 @@ function verifyArtifacts() {
     }
     const titleMatch = html.match(/<title>([^<]*)<\/title>/);
     const descMatch = html.match(/<meta\s+name="description"\s+content="([^"]*)"/);
+    const kwMatch = html.match(/<meta\s+name="keywords"\s+content="([^"]*)"/);
     if (!titleMatch) {
       problems.push(`${rel}: 缺少 <title>`);
       seoOk = false;
@@ -1242,6 +1287,16 @@ function verifyArtifacts() {
       seoOk = false;
     } else {
       descriptions.set(descMatch[1], rel);
+    }
+    if (!kwMatch) {
+      problems.push(`${rel}: 缺少 meta keywords`);
+      seoOk = false;
+    } else if (kwMatch[1].trim() === '') {
+      problems.push(`${rel}: meta keywords 为空`);
+      seoOk = false;
+    } else if (kwMatch[1].length > KEYWORDS_MAX_LENGTH) {
+      problems.push(`${rel}: meta keywords ${kwMatch[1].length} 字符，超过 ${KEYWORDS_MAX_LENGTH} 上限`);
+      seoOk = false;
     }
 
     for (const m of html.matchAll(/<a\s[^>]*>/g)) {
@@ -1324,7 +1379,7 @@ function verifyArtifacts() {
   console.log('自检通过:');
   console.log(`  ✓ 文件完整性: index.html + card/×${cardFiles.length}`);
   console.log(`  ✓ 语义结构: ${pages.length} 页 header/nav/main/section/footer 齐全、恰一个 h1、无标题跳级`);
-  console.log(`  ✓ SEO 标签: ${pages.length} 页 viewport/canonical/description 齐全，title/description 全站唯一`);
+  console.log(`  ✓ SEO 标签: ${pages.length} 页 viewport/canonical/description/keywords 齐全，title/description 全站唯一，keywords ≤ ${KEYWORDS_MAX_LENGTH} 字符`);
   console.log(`  ✓ sitemap.xml: ${locs.length} 个 <loc> 且均对应实际产物文件`);
   console.log('  ✓ robots.txt: 含 Sitemap 声明');
   console.log('  ✓ llms.txt: 页面 URL 与 sitemap 完全一致');
@@ -1361,6 +1416,7 @@ module.exports = {
   validateData,
   parsePriceRange,
   toCardPairs,
+  cardKeywords,
   indexMeta,
   renderLayout,
   renderFooterNav,
