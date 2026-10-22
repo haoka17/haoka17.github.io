@@ -452,12 +452,14 @@ function indexMeta(pairs) {
 /* ③ 渲染层（模板函数，无模板引擎）                                    */
 /* ================================================================== */
 
-/** 通用布局骨架头部导航：首页在首页本身渲染为当前位置 span，其余为站内链接（子页视角为相对路径回链） */
+/** 通用布局骨架头部导航：首页在首页本身渲染为当前位置 span，其余为站内链接（子页视角为相对路径回链）；并常驻「关于/联系」入口（About & Contact 信任信号） */
 function renderHeaderNav(currentSlug) {
   const homeItem = currentSlug === HOME_SLUG
     ? '<span aria-current="page" class="nav-current">首页</span>'
     : '<a href="../index.html" title="返回首页">首页</a>';
-  return `<nav aria-label="主导航">${homeItem}</nav>`;
+  const aboutHref = currentSlug === HOME_SLUG ? '#about' : '../index.html#about';
+  const contactHref = currentSlug === HOME_SLUG ? '#contact' : '../index.html#contact';
+  return `<nav aria-label="主导航">${homeItem} · <a href="${aboutHref}" title="关于本站">关于</a> · <a href="${contactHref}" title="联系站长">联系</a></nav>`;
 }
 
 /**
@@ -557,12 +559,12 @@ ${mainHtml}
   <div class="container">
 ${renderFooterNav(currentSlug, pairs)}
     <p class="footer-legal">
-      <a href="${isHome ? 'index.html' : '../index.html'}#about" title="关于本站">关于本站</a> ·
-      <a href="${isHome ? 'index.html' : '../index.html'}#contact" title="联系站长">联系站长</a> ·
-      <a href="${isHome ? 'index.html' : '../index.html'}#privacy" title="隐私政策">隐私政策</a> ·
-      <a href="${isHome ? 'index.html' : '../index.html'}#terms" title="服务条款">服务条款</a>
+      <a href="${isHome ? '' : '../index.html'}#about" title="关于本站">关于本站</a> ·
+      <a href="${isHome ? '' : '../index.html'}#contact" title="联系站长">联系站长</a> ·
+      <a href="${isHome ? '' : '../index.html'}#privacy" title="隐私政策">隐私政策</a> ·
+      <a href="${isHome ? '' : '../index.html'}#terms" title="服务条款">服务条款</a>
     </p>
-    <p class="copyright">© <span data-year>${year}</span> ${SITE.siteName} · <a href="${isHome ? 'index.html' : '../index.html'}#terms" title="免责声明">免责声明</a></p>
+    <p class="copyright">© <span data-year>${year}</span> ${SITE.siteName} · <a href="${isHome ? '' : '../index.html'}#terms" title="免责声明">免责声明</a></p>
   </div>
 </footer>
 <script src="${assetPrefix}assets/js/main.js" defer></script>
