@@ -465,9 +465,11 @@ test('SEO：11 页均有独立 <title>、meta description、canonical、JSON-LD�
 
 test('JSON-LD：首页 WebSite + ItemList(10)；子页 WebPage(Product/AggregateOffer) + 双外链 ItemList', () => {
   const indexLd = extractJsonLd(indexHtml, 'index.html');
-  const [website, itemList] = indexLd['@graph'];
-  assert.strictEqual(website['@type'], 'WebSite');
+  const website = indexLd['@graph'].find((n) => n['@type'] === 'WebSite');
+  const itemList = indexLd['@graph'].find((n) => n['@type'] === 'ItemList');
+  assert.ok(website, '首页应含 WebSite 节点');
   assert.strictEqual(website.url, 'https://haoka17.github.io/');
+  assert.ok(itemList, '首页应含 ItemList 节点');
   assert.strictEqual(itemList['@type'], 'ItemList');
   assert.strictEqual(itemList.numberOfItems, 10, '首页 ItemList numberOfItems === 10');
   assert.deepStrictEqual(
@@ -475,12 +477,19 @@ test('JSON-LD：首页 WebSite + ItemList(10)；子页 WebPage(Product/Aggregate
     pairs.map((p) => p.pageUrl),
     '首页 ItemList URL 顺序应与 data.js 一致'
   );
+  assert.ok(
+    indexLd['@graph'].some((n) => n['@type'] === 'Organization' && Array.isArray(n.sameAs) && n.sameAs.length > 0),
+    '首页应含带 sameAs 的 Organization 节点'
+  );
+  const homeWebPage = indexLd['@graph'].find((n) => n['@type'] === 'WebPage');
+  assert.ok(homeWebPage && homeWebPage.author && homeWebPage.datePublished && homeWebPage.dateModified, '首页应含带作者/日期的 WebPage 节点');
 
   for (const { pair, html } of cardPages) {
     const where = `card/${pair.slug}.html`;
     const ld = extractJsonLd(html, where);
-    const [webpage, subList] = ld['@graph'];
-    assert.strictEqual(webpage['@type'], 'WebPage', `${where} 应含 WebPage`);
+    const webpage = ld['@graph'].find((n) => n['@type'] === 'WebPage');
+    const subList = ld['@graph'].find((n) => n['@type'] === 'ItemList');
+    assert.ok(webpage, `${where} 应含 WebPage`);
     assert.strictEqual(webpage.url, pair.pageUrl, `${where} WebPage.url 应为页面 URL`);
     assert.strictEqual(webpage.about['@type'], 'Product', `${where} about 应为 Product`);
     if (pair.price) {
@@ -491,7 +500,7 @@ test('JSON-LD：首页 WebSite + ItemList(10)；子页 WebPage(Product/Aggregate
     } else {
       assert.strictEqual(webpage.about.offers, undefined, `${where} E9 降级应省略 offers`);
     }
-    assert.strictEqual(subList['@type'], 'ItemList');
+    assert.ok(subList, `${where} 应含 ItemList`);
     assert.strictEqual(subList.itemListElement.length, 2, `${where} 应含两个外链 ListItem`);
     assert.strictEqual(subList.itemListElement[0].url, pair.card.url, `${where} ListItem[0] 应为号卡 URL`);
     assert.strictEqual(subList.itemListElement[1].url, pair.proxy.url, `${where} ListItem[1] 应为代理 URL`);

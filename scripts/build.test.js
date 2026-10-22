@@ -236,7 +236,7 @@ test('renderIndexMain：badge/价格/覆盖标签/双链接/代理区；E8 缺�
   assert.ok(html.includes('每月低至 9 元'), 'hero-meta 应取全部平台最低价');
   // 外链转义（& → &amp;）与安全属性
   assert.ok(html.includes('href="https://a.example.com/?x=1&amp;y=2#z"'), 'URL 特殊字符应被转义');
-  assert.ok((html.match(/target="_blank" rel="noopener noreferrer"/g) || []).length >= 4, '号卡外链+代理外链均含安全属性');
+  assert.ok((html.match(/target="_blank" rel="sponsored nofollow noopener noreferrer"/g) || []).length >= 4, '号卡外链+代理外链均含安全属性与推广标识');
   // 站内详情链接（同窗口，无 target；首页视角相对路径 card/{slug}.html）
   assert.ok(html.includes('href="card/test-a.html"'));
   // 代理合作区：仅代理链接，不含号卡办理链接（design.md 2.1 外链跳转约定）
@@ -350,8 +350,8 @@ test('renderCardMain：hero 双 CTA + 速览网格 + 简介 + 步骤条 + 代理
   assert.ok(html.includes('badge-hot') && html.includes('>热门<'));
   assert.ok(html.includes('19-49元/月'));
   assert.ok(html.includes('部分地区'), 'nationwide=false 应展示"部分地区"');
-  assert.ok(html.includes('href="https://card.example.com/" target="_blank" rel="noopener noreferrer"'));
-  assert.ok(html.includes('href="https://proxy.example.com/" target="_blank" rel="noopener noreferrer"'));
+  assert.ok(html.includes('href="https://card.example.com/" target="_blank" rel="sponsored nofollow noopener noreferrer"'));
+  assert.ok(html.includes('href="https://proxy.example.com/" target="_blank" rel="sponsored nofollow noopener noreferrer"'));
 
   // 模块 1：平台速览网格（dl.spec-grid，四格 dt/dd 对应派生字段）
   const specGrid = html.match(/<dl class="spec-grid">[\s\S]*?<\/dl>/);
@@ -384,9 +384,9 @@ test('renderCardMain：hero 双 CTA + 速览网格 + 简介 + 步骤条 + 代理
   assert.ok(html.includes('>测试卡代理</p>'), '代理卡应展示代理名');
   assert.ok(html.includes('直达代理申请通道'));
   assert.strictEqual(
-    (html.match(/href="https:\/\/proxy\.example\.com\/" target="_blank" rel="noopener noreferrer"/g) || []).length,
+    (html.match(/href="https:\/\/proxy\.example\.com\/" target="_blank" rel="sponsored nofollow noopener noreferrer"/g) || []).length,
     2,
-    'hero 次级 CTA 与代理卡 CTA 均指向代理 URL 且含安全属性'
+    'hero 次级 CTA 与代理卡 CTA 均指向代理 URL 且含安全属性与推广标识'
   );
 
   // 模块 5：常见问题（4 个 details/summary 折叠条目）
@@ -579,7 +579,7 @@ test('renderLayout 首页版：资源/互链/favicon 均为站点根相对路径
 /* 9. JSON-LD（解析不抛错 + 首页 ItemList + 子页双外链 ListItem）      */
 /* ================================================================== */
 
-test('cardJsonLd：WebPage + Product/AggregateOffer + 两个外链 ListItem；price 缺失省略 offers', () => {
+test('cardJsonLd：Organization + WebPage(作者/日期) + Product/AggregateOffer + 两个外链 ListItem；price 缺失省略 offers', () => {
   const pair = {
     card: {
       name: '测试卡',
@@ -599,24 +599,35 @@ test('cardJsonLd：WebPage + Product/AggregateOffer + 两个外链 ListItem；pr
   const ld = cardJsonLd(pair);
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(ld)), 'JSON-LD 必须可序列化解析');
   assert.strictEqual(ld['@context'], 'https://schema.org');
-  assert.strictEqual(ld['@graph'].length, 2);
+  assert.strictEqual(ld['@graph'].length, 3);
 
-  const webpage = ld['@graph'][0];
-  assert.strictEqual(webpage['@type'], 'WebPage');
+  const webpage = ld['@graph'].find((n) => n['@type'] === 'WebPage');
+  assert.ok(webpage, '应含 WebPage 节点');
   assert.strictEqual(webpage.url, pair.pageUrl);
   assert.ok(!webpage.name.includes(' - 好卡导航'), 'WebPage name 不含站名后缀');
+  assert.ok(webpage.author, 'WebPage 应含 author 引用');
+  assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(webpage.datePublished || ''), 'datePublished 格式非法');
+  assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(webpage.dateModified || ''), 'dateModified 格式非法');
   assert.strictEqual(webpage.about['@type'], 'Product');
   assert.strictEqual(webpage.about.offers.priceCurrency, 'CNY');
   assert.strictEqual(webpage.about.offers.lowPrice, 19);
   assert.strictEqual(webpage.about.offers.highPrice, 49);
 
-  const itemList = ld['@graph'][1];
+  const org = ld['@graph'].find((n) => n['@type'] === 'Organization');
+  assert.ok(org, '应含 Organization 节点');
+  assert.ok(Array.isArray(org.sameAs) && org.sameAs.length > 0, 'Organization 应含 sameAs 身份聚合');
+
+  const itemList = ld['@graph'].find((n) => n['@type'] === 'ItemList');
   assert.strictEqual(itemList.itemListElement.length, 2, '两个外链入口');
   assert.strictEqual(itemList.itemListElement[0].url, 'https://card.example.com/');
   assert.strictEqual(itemList.itemListElement[1].url, 'https://proxy.example.com/');
 
   const noOffer = cardJsonLd({ ...pair, price: null });
-  assert.strictEqual(noOffer['@graph'][0].about.offers, undefined, 'E9 降级：无价格时省略 offers');
+  assert.strictEqual(
+    noOffer['@graph'].find((n) => n['@type'] === 'WebPage').about.offers,
+    undefined,
+    'E9 降级：无价格时省略 offers',
+  );
 });
 
 test('indexJsonLd 真实数据：ItemList.numberOfItems === 10，11 页 JSON-LD 均可 JSON.parse', () => {
@@ -624,9 +635,13 @@ test('indexJsonLd 真实数据：ItemList.numberOfItems === 10，11 页 JSON-LD 
   const pairs = toCardPairs(list, proxyList);
 
   const indexLd = indexJsonLd(pairs);
-  assert.strictEqual(indexLd['@graph'][1]['@type'], 'ItemList');
-  assert.strictEqual(indexLd['@graph'][1].numberOfItems, 10);
-  assert.strictEqual(indexLd['@graph'][1].itemListElement.length, 10);
+  const itemList = indexLd['@graph'].find((n) => n['@type'] === 'ItemList');
+  assert.ok(itemList, '首页 @graph 应含 ItemList');
+  assert.strictEqual(itemList.numberOfItems, 10);
+  assert.strictEqual(itemList.itemListElement.length, 10);
+  assert.ok(indexLd['@graph'].some((n) => n['@type'] === 'Organization' && n.sameAs), '首页应含带 sameAs 的 Organization');
+  const webpage = indexLd['@graph'].find((n) => n['@type'] === 'WebPage');
+  assert.ok(webpage && webpage.author && webpage.datePublished && webpage.dateModified, '首页应含带作者/日期的 WebPage');
 
   // 11 页 JSON-LD 序列化解析不抛错（renderLayout 内已做 < 转义）
   const pages = [
@@ -796,17 +811,20 @@ test('数据完整性：proxyList 每条 name/url 存在且类型正确，url �
 /* 14. indexMeta（首页 title/description/canonical 生成规则）          */
 /* ================================================================== */
 
-test('indexMeta：首页 title/description/canonical 与 design.md 1.3.5 模板一致', () => {
+test('indexMeta：首页 title(40~60)/description(140~160)/canonical 符合 AI-SEO 模板', () => {
   const { list, proxyList } = loadRealData();
   const meta = indexMeta(toCardPairs(list, proxyList));
 
-  assert.strictEqual(meta.title, '好卡导航 - 精选正规流量卡/号卡平台导航与代理入口');
+  assert.strictEqual(meta.title, '好卡导航 - 正规流量卡办理平台导航：10大号卡平台官方入口与代理申请通道，资费对比一站直达');
   assert.strictEqual(
     meta.description,
-    '聚合 10 个正规号卡平台官方办理入口与代理申请通道，覆盖电信星卡、172号卡等热门流量卡品牌，' +
-    '附资费区间与适用地区说明，一站比选直达办理。'
+    '聚合10个正规号卡平台（电信星卡、172号卡、咔咔通信、蛋蛋号卡等）的官方办理入口与代理申请通道，' +
+    '覆盖四网套餐与资费区间，附办理注意事项、发货时间、实名限额与常见问题说明，' +
+    '另有各平台代理申请入口，助您快速选卡、安全办卡、一站比选直达官方平台办理，' +
+    '本站为纯静态导航站，无注册登录、无追踪脚本，资费以各平台官方页面为准。'
   );
-  assert.ok(meta.description.length <= 160, '首页 description ≤ 160 字符');
+  assert.ok(meta.title.length >= 40 && meta.title.length <= 60, `首页 title 应在 40~60 字符（当前 ${meta.title.length}）`);
+  assert.ok(meta.description.length >= 140 && meta.description.length <= 160, `首页 description 应在 140~160 字符（当前 ${meta.description.length}）`);
   assert.strictEqual(meta.canonicalPath, 'https://haoka17.github.io/');
 });
 

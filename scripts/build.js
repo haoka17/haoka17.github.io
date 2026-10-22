@@ -34,6 +34,16 @@ const SITE = {
   ogImage: '/assets/img/og-default.png',
 };
 
+/** 站点主体（作者署名 / 身份聚合 sameAs / 联系信息，用于 AI 引证信任信号） */
+const SITE_AUTHOR = {
+  name: '好卡导航团队',
+  contactWechat: 'wcbbll',
+  sameAs: ['https://github.com/haoka17'],
+};
+
+/** 内容首次公开日期（YYYY-MM-DD，机器可读新鲜度信号 datePublished） */
+const SITE_PUBLISHED = '2026-10-22';
+
 /** 平台名 → 子页 slug 内置映射（现有 10 个平台固化，design.md 4.2） */
 const SLUG_MAP = {
   '电信星卡': 'dianxin-xingka',
@@ -414,14 +424,17 @@ function toCardPairs(list, proxyList) {
   });
 }
 
-/** 首页元数据（title/description/canonical/keywords，design.md 1.3.5 模板） */
+/** 首页元数据（title 40~60 字、description 140~160 字，AI-SEO 审计标准） */
 function indexMeta(pairs) {
   const n = pairs.length;
   return {
-    title: `${SITE.siteName} - 精选正规流量卡/号卡平台导航与代理入口`,
+    title:
+      `好卡导航 - 正规流量卡办理平台导航：${n}大号卡平台官方入口与代理申请通道，资费对比一站直达`,
     description:
-      `聚合 ${n} 个正规号卡平台官方办理入口与代理申请通道，` +
-      '覆盖电信星卡、172号卡等热门流量卡品牌，附资费区间与适用地区说明，一站比选直达办理。',
+      `聚合${n}个正规号卡平台（电信星卡、172号卡、咔咔通信、蛋蛋号卡等）的官方办理入口与代理申请通道，` +
+      '覆盖四网套餐与资费区间，附办理注意事项、发货时间、实名限额与常见问题说明，' +
+      '另有各平台代理申请入口，助您快速选卡、安全办卡、一站比选直达官方平台办理，' +
+      '本站为纯静态导航站，无注册登录、无追踪脚本，资费以各平台官方页面为准。',
     canonicalPath: `${SITE.baseUrl}/`,
     keywords:
       '好卡导航,流量卡导航,正规流量卡,流量卡办理,号卡平台,号卡代理,流量卡资费,流量卡申请,号卡比选',
@@ -503,6 +516,9 @@ function renderLayout(page) {
 <meta name="description" content="${escapeHtml(description)}">
 <meta name="keywords" content="${escapeHtml(keywords)}">
 <meta name="robots" content="index, follow">
+<meta name="author" content="${SITE_AUTHOR.name}">
+<meta name="datePublished" content="${SITE_PUBLISHED}">
+<meta name="dateModified" content="${today()}">
 <link rel="canonical" href="${escapeHtml(canonicalPath)}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${SITE.siteName}">
@@ -533,7 +549,13 @@ ${mainHtml}
 <footer class="site-footer">
   <div class="container">
 ${renderFooterNav(currentSlug, pairs)}
-    <p class="copyright">© <span data-year>${year}</span> ${SITE.siteName} · 免责声明</p>
+    <p class="footer-legal">
+      <a href="${isHome ? 'index.html' : '../index.html'}#about">关于本站</a> ·
+      <a href="${isHome ? 'index.html' : '../index.html'}#contact">联系站长</a> ·
+      <a href="${isHome ? 'index.html' : '../index.html'}#privacy">隐私政策</a> ·
+      <a href="${isHome ? 'index.html' : '../index.html'}#terms">服务条款</a>
+    </p>
+    <p class="copyright">© <span data-year>${year}</span> ${SITE.siteName} · <a href="${isHome ? 'index.html' : '../index.html'}#terms">免责声明</a></p>
   </div>
 </footer>
 <script src="${assetPrefix}assets/js/main.js" defer></script>
@@ -602,7 +624,7 @@ function renderIndexMain(pairs) {
     <p class="card-desc">${escapeHtml(card.description)}</p>
     <p class="price">${escapeHtml(card.priceRange)}</p>
     ${areaTag ? `    <div class="card-tags">${areaTag}</div>\n` : ''}    <div class="card-actions">
-      <a class="card-cta" href="${escapeHtml(card.url)}" target="_blank" rel="noopener noreferrer">前往${escapeHtml(card.name)} ↗</a>
+      <a class="card-cta" href="${escapeHtml(card.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">前往${escapeHtml(card.name)} ↗</a>
       <a class="card-link" href="card/${escapeHtml(pair.slug)}.html">查看详情 →</a>
     </div>
   </article>
@@ -610,7 +632,7 @@ function renderIndexMain(pairs) {
   }).join('\n');
 
   const proxies = pairs.map((pair) =>
-    `      <li><a class="proxy-link" href="${escapeHtml(pair.proxy.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(pair.proxy.name)} ↗</a></li>`
+    `      <li><a class="proxy-link" href="${escapeHtml(pair.proxy.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">${escapeHtml(pair.proxy.name)} ↗</a></li>`
   ).join('\n');
 
   return `<section class="hero">
@@ -636,6 +658,46 @@ ${renderNotice()}
     <ul class="proxy-grid">
 ${proxies}
     </ul>
+  </div>
+</section>
+<section class="about-section" id="about" aria-labelledby="about-title">
+  <div class="container">
+    <h2 id="about-title">关于本站</h2>
+    <p>好卡导航（haoka17.github.io）是一个号卡/流量卡聚合导航站：聚合 ${n} 个正规号卡平台的官方办理入口与代理申请通道，为每个平台提供资费区间、覆盖范围与平台简介，方便您横向比较、快速直达官方页面办理。本站为纯静态站点，无后端、无注册登录、无追踪脚本。</p>
+    <p class="byline">维护：${SITE_AUTHOR.name} · 更新于 <time datetime="${SITE_PUBLISHED}">${SITE_PUBLISHED}</time> · 联系微信：${SITE_AUTHOR.contactWechat}</p>
+  </div>
+</section>
+<section class="source-section" id="sources" aria-labelledby="sources-title">
+  <div class="container">
+    <h2 id="sources-title">资料来源与引证</h2>
+    <p>本站内容与办理须知以下列公开信息源为依据，供 AI 与访客溯源核验：</p>
+    <ul class="source-list">
+      <li>办卡数量限制：依据工业和信息化部电话用户实名登记管理相关规定（同一运营商名下最多 5 张实名手机卡）。官方来源：<a href="https://www.miit.gov.cn" target="_blank" rel="noopener noreferrer">工业和信息化部官网</a></li>
+      <li>运营商官方客服热线：中国移动 10086（<a href="https://www.10086.cn" target="_blank" rel="noopener noreferrer">中国移动官网</a>）、中国联通 10010（<a href="https://www.10010.com" target="_blank" rel="noopener noreferrer">中国联通官网</a>）、中国电信 10000（<a href="https://www.189.cn" target="_blank" rel="noopener noreferrer">中国电信官网</a>）、中国广电 10099（<a href="https://www.10099.com.cn" target="_blank" rel="noopener noreferrer">中国广电官网</a>）。</li>
+      <li>平台资费与套餐：以各号卡平台官方页面实时展示为准，本站不标注具体合约期与资费承诺。</li>
+    </ul>
+    <blockquote>
+      <p>“办卡前请核对平台资质与套餐明细，实名信息仅用于运营商入网登记；办卡、激活与售后均在各平台官方页面完成。”</p>
+      <figcaption>—— 好卡导航《办理须知》</figcaption>
+    </blockquote>
+  </div>
+</section>
+<section class="legal-section" id="privacy" aria-labelledby="privacy-title">
+  <div class="container">
+    <h2 id="privacy-title">隐私政策</h2>
+    <p>本站为纯静态导航站，不设置注册登录，不收集、不存储任何访客个人信息；不使用 Cookie 与第三方追踪脚本。访问行为由托管平台（GitHub Pages）按其日志策略处理。</p>
+  </div>
+</section>
+<section class="legal-section" id="terms" aria-labelledby="terms-title">
+  <div class="container">
+    <h2 id="terms-title">服务条款与免责声明</h2>
+    <p>本站仅提供信息导航与比选服务，不直接售卡、不参与交易与物流；各平台名称与商标归其权利人所有。页面展示的资费区间仅供参考，实际套餐、价格与优惠以各平台官方页面实时展示为准。跳转外部平台后，相关服务与责任由对应平台承担。</p>
+  </div>
+</section>
+<section class="contact-section" id="contact" aria-labelledby="contact-title">
+  <div class="container">
+    <h2 id="contact-title">联系站长</h2>
+    <p>商务合作、收录申请或问题反馈请联系站长（微信：${SITE_AUTHOR.contactWechat}）。友情链接与收录需求请附站点名称、网址与简介。</p>
   </div>
 </section>`;
 }
@@ -742,8 +804,8 @@ ${relatedItems}
       <li>💳 资费：<strong class="price">${escapeHtml(card.priceRange)}</strong></li>${areaItem}
     </ul>
     <div class="cta-group">
-      <a class="btn btn-primary" href="${escapeHtml(card.url)}" target="_blank" rel="noopener noreferrer">前往${escapeHtml(card.name)}官方平台 ↗</a>
-      <a class="btn btn-secondary" href="${escapeHtml(proxy.url)}" target="_blank" rel="noopener noreferrer">申请成为${escapeHtml(card.name)}代理 ↗</a>
+      <a class="btn btn-primary" href="${escapeHtml(card.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">前往${escapeHtml(card.name)}官方平台 ↗</a>
+      <a class="btn btn-secondary" href="${escapeHtml(proxy.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">申请成为${escapeHtml(card.name)}代理 ↗</a>
     </div>
     <p class="note">跳转至外部平台，本站不直接售卡</p>
   </div>
@@ -777,7 +839,7 @@ ${stepItems}
           <p class="agent-card-name">${escapeHtml(proxy.name)}</p>
           <p class="agent-card-desc">${AGENT_CARD_DESC}</p>
         </div>
-        <a class="btn btn-primary agent-card-cta" href="${escapeHtml(proxy.url)}" target="_blank" rel="noopener noreferrer">直达代理申请通道 ↗</a>
+        <a class="btn btn-primary agent-card-cta" href="${escapeHtml(proxy.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">直达代理申请通道 ↗</a>
       </div>
     </section>
     <section class="extra-block">
@@ -794,11 +856,23 @@ ${faqItems}
 /* ③' SEO 元数据与 JSON-LD（design.md 1.3.5 / 1.3.6）                  */
 /* ================================================================== */
 
-/** 首页 JSON-LD：WebSite + ItemList（@graph 联合发布） */
+/**
+ * 首页 JSON-LD：Organization（含 sameAs 身份聚合）+ WebSite + WebPage（作者/日期引证信号）+ ItemList。
+ * 所有节点均带 @id；WebPage 承载 author / datePublished / dateModified（AI 引证信任）。
+ */
 function indexJsonLd(pairs) {
+  const meta = indexMeta(pairs);
   return {
     '@context': 'https://schema.org',
     '@graph': [
+      {
+        '@type': 'Organization',
+        '@id': `${SITE.baseUrl}/#organization`,
+        name: SITE.siteName,
+        url: `${SITE.baseUrl}/`,
+        logo: { '@type': 'ImageObject', url: SITE.baseUrl + SITE.ogImage },
+        sameAs: SITE_AUTHOR.sameAs,
+      },
       {
         '@type': 'WebSite',
         '@id': `${SITE.baseUrl}/#website`,
@@ -806,6 +880,20 @@ function indexJsonLd(pairs) {
         url: `${SITE.baseUrl}/`,
         description: `聚合 ${pairs.length} 个正规号卡平台官方办理入口与代理申请通道`,
         inLanguage: 'zh-CN',
+        publisher: { '@id': `${SITE.baseUrl}/#organization` },
+        dateModified: today(),
+      },
+      {
+        '@type': 'WebPage',
+        '@id': `${SITE.baseUrl}/#webpage`,
+        url: `${SITE.baseUrl}/`,
+        name: meta.title,
+        description: meta.description,
+        inLanguage: 'zh-CN',
+        isPartOf: { '@id': `${SITE.baseUrl}/#website` },
+        author: { '@id': `${SITE.baseUrl}/#organization` },
+        datePublished: SITE_PUBLISHED,
+        dateModified: today(),
       },
       {
         '@type': 'ItemList',
@@ -845,6 +933,14 @@ function cardJsonLd(pair) {
     '@context': 'https://schema.org',
     '@graph': [
       {
+        '@type': 'Organization',
+        '@id': `${SITE.baseUrl}/#organization`,
+        name: SITE.siteName,
+        url: `${SITE.baseUrl}/`,
+        logo: { '@type': 'ImageObject', url: SITE.baseUrl + SITE.ogImage },
+        sameAs: SITE_AUTHOR.sameAs,
+      },
+      {
         '@type': 'WebPage',
         '@id': `${pair.pageUrl}#webpage`,
         url: pair.pageUrl,
@@ -852,10 +948,14 @@ function cardJsonLd(pair) {
         description: pair.description,
         inLanguage: 'zh-CN',
         isPartOf: { '@id': `${SITE.baseUrl}/#website` },
+        author: { '@id': `${SITE.baseUrl}/#organization` },
+        datePublished: SITE_PUBLISHED,
+        dateModified: today(),
         about,
       },
       {
         '@type': 'ItemList',
+        '@id': `${pair.pageUrl}#entrylist`,
         name: `${pair.card.name}外部入口`,
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: `前往${pair.card.name}官方平台`, url: pair.card.url },
