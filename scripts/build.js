@@ -37,6 +37,7 @@ const SITE = {
 /** 站点主体（作者署名 / 身份聚合 sameAs / 联系信息，用于 AI 引证信任信号） */
 const SITE_AUTHOR = {
   name: '好卡导航团队',
+  alternateName: '好卡导航站',
   contactWechat: 'wcbbll',
   sameAs: ['https://github.com/haoka17'],
 };
@@ -111,8 +112,8 @@ const AGENT_CARD_DESC = '有意代理推广？直达该平台代理申请通道�
 const DESC_SLICE = 70;
 /** meta title / description 最大长度 */
 const META_MAX_LENGTH = 160;
-/** meta keywords 最大长度（SEO 规范：不超过 100 字符） */
-const KEYWORDS_MAX_LENGTH = 100;
+/** meta keywords 最大长度（SEO 规范参考值；站长口径：多一点不碍事，放宽至 200） */
+const KEYWORDS_MAX_LENGTH = 200;
 
 /**
  * 号卡平台条目（data.js 导出数组 list 的元素）
@@ -379,10 +380,16 @@ function cardKeywords(card) {
     `${card.name}流量卡`,
     `${card.name}办理入口`,
     card.priceRange ? `${card.priceRange}流量卡` : null,
+    `${card.name}怎么样`,
     '正规流量卡',
     '流量卡资费',
     '号卡代理申请',
     '流量卡办理',
+    '手机卡办理',
+    '大流量卡推荐',
+    '低月租流量卡',
+    '全国流量卡',
+    '流量卡比价',
   ].filter(Boolean);
   let keywords = terms.join(',');
   if (keywords.length > KEYWORDS_MAX_LENGTH) {
@@ -437,7 +444,7 @@ function indexMeta(pairs) {
       '本站为纯静态导航站，无注册登录、无追踪脚本，资费以各平台官方页面为准。',
     canonicalPath: `${SITE.baseUrl}/`,
     keywords:
-      '好卡导航,流量卡导航,正规流量卡,流量卡办理,号卡平台,号卡代理,流量卡资费,流量卡申请,号卡比选',
+      '好卡导航,流量卡导航,正规流量卡,流量卡办理,号卡平台,号卡代理,流量卡资费,流量卡申请,号卡比选,手机卡办理,大流量卡推荐,低月租流量卡,流量卡套餐对比,电信流量卡,联通流量卡,移动流量卡,广电流量卡,免费办卡,大流量套餐,流量卡商城,校园流量卡,随身WiFi,无线流量卡,号卡办理',
   };
 }
 
@@ -449,7 +456,7 @@ function indexMeta(pairs) {
 function renderHeaderNav(currentSlug) {
   const homeItem = currentSlug === HOME_SLUG
     ? '<span aria-current="page" class="nav-current">首页</span>'
-    : '<a href="../index.html">首页</a>';
+    : '<a href="../index.html" title="返回首页">首页</a>';
   return `<nav aria-label="主导航">${homeItem}</nav>`;
 }
 
@@ -469,16 +476,16 @@ function renderFooterNav(currentSlug, pairs) {
   const items = [];
   items.push(isHome
     ? '<li><span aria-current="page" class="current">首页</span></li>'
-    : '<li><a href="../index.html">首页</a></li>');
+    : '<li><a href="../index.html" title="返回首页">首页</a></li>');
   for (const pair of pairs) {
     items.push(pair.slug === currentSlug
       ? `<li><span aria-current="page" class="current">${escapeHtml(pair.card.name)}</span></li>`
-      : `<li><a href="${cardHref(pair.slug)}">${escapeHtml(pair.card.name)}</a></li>`);
+      : `<li><a href="${cardHref(pair.slug)}" title="${escapeHtml(pair.card.name)}">${escapeHtml(pair.card.name)}</a></li>`);
   }
   // 外部友链：绝对 URL + 新窗口安全属性（首页/子页统一渲染）
   for (const link of EXTERNAL_FRIEND_LINKS) {
     items.push(
-      `<li><a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.name)} ↗</a></li>`
+      `<li><a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(link.name)}">${escapeHtml(link.name)} ↗</a></li>`
     );
   }
   return [
@@ -536,10 +543,10 @@ function renderLayout(page) {
 <script type="application/ld+json">${jsonLdText}</script>
 </head>
 <body>
-<a class="skip-link" href="#main">跳到主要内容</a>
+<a class="skip-link" href="#main" title="跳到主要内容">跳到主要内容</a>
 <header class="site-header">
   <div class="container header-inner">
-    <a class="logo" href="${isHome ? 'index.html' : '../index.html'}">⬡ ${SITE.siteName}</a>
+    <a class="logo" href="${isHome ? 'index.html' : '../index.html'}" title="返回首页">⬡ ${SITE.siteName}</a>
     ${renderHeaderNav(currentSlug)}
   </div>
 </header>
@@ -550,12 +557,12 @@ ${mainHtml}
   <div class="container">
 ${renderFooterNav(currentSlug, pairs)}
     <p class="footer-legal">
-      <a href="${isHome ? 'index.html' : '../index.html'}#about">关于本站</a> ·
-      <a href="${isHome ? 'index.html' : '../index.html'}#contact">联系站长</a> ·
-      <a href="${isHome ? 'index.html' : '../index.html'}#privacy">隐私政策</a> ·
-      <a href="${isHome ? 'index.html' : '../index.html'}#terms">服务条款</a>
+      <a href="${isHome ? 'index.html' : '../index.html'}#about" title="关于本站">关于本站</a> ·
+      <a href="${isHome ? 'index.html' : '../index.html'}#contact" title="联系站长">联系站长</a> ·
+      <a href="${isHome ? 'index.html' : '../index.html'}#privacy" title="隐私政策">隐私政策</a> ·
+      <a href="${isHome ? 'index.html' : '../index.html'}#terms" title="服务条款">服务条款</a>
     </p>
-    <p class="copyright">© <span data-year>${year}</span> ${SITE.siteName} · <a href="${isHome ? 'index.html' : '../index.html'}#terms">免责声明</a></p>
+    <p class="copyright">© <span data-year>${year}</span> ${SITE.siteName} · <a href="${isHome ? 'index.html' : '../index.html'}#terms" title="免责声明">免责声明</a></p>
   </div>
 </footer>
 <script src="${assetPrefix}assets/js/main.js" defer></script>
@@ -624,15 +631,15 @@ function renderIndexMain(pairs) {
     <p class="card-desc">${escapeHtml(card.description)}</p>
     <p class="price">${escapeHtml(card.priceRange)}</p>
     ${areaTag ? `    <div class="card-tags">${areaTag}</div>\n` : ''}    <div class="card-actions">
-      <a class="card-cta" href="${escapeHtml(card.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">前往${escapeHtml(card.name)} ↗</a>
-      <a class="card-link" href="card/${escapeHtml(pair.slug)}.html">查看详情 →</a>
+      <a class="card-cta" href="${escapeHtml(card.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer" title="前往${escapeHtml(card.name)}办理">前往${escapeHtml(card.name)} ↗</a>
+      <a class="card-link" href="card/${escapeHtml(pair.slug)}.html" title="查看${escapeHtml(card.name)}详情">查看详情 →</a>
     </div>
   </article>
 </li>`;
   }).join('\n');
 
   const proxies = pairs.map((pair) =>
-    `      <li><a class="proxy-link" href="${escapeHtml(pair.proxy.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">${escapeHtml(pair.proxy.name)} ↗</a></li>`
+    `      <li><a class="proxy-link" href="${escapeHtml(pair.proxy.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer" title="${escapeHtml(pair.proxy.name)}">${escapeHtml(pair.proxy.name)} ↗</a></li>`
   ).join('\n');
 
   return `<section class="hero">
@@ -672,8 +679,8 @@ ${proxies}
     <h2 id="sources-title">资料来源与引证</h2>
     <p>本站内容与办理须知以下列公开信息源为依据，供 AI 与访客溯源核验：</p>
     <ul class="source-list">
-      <li>办卡数量限制：依据工业和信息化部电话用户实名登记管理相关规定（同一运营商名下最多 5 张实名手机卡）。官方来源：<a href="https://www.miit.gov.cn" target="_blank" rel="noopener noreferrer">工业和信息化部官网</a></li>
-      <li>运营商官方客服热线：中国移动 10086（<a href="https://www.10086.cn" target="_blank" rel="noopener noreferrer">中国移动官网</a>）、中国联通 10010（<a href="https://www.10010.com" target="_blank" rel="noopener noreferrer">中国联通官网</a>）、中国电信 10000（<a href="https://www.189.cn" target="_blank" rel="noopener noreferrer">中国电信官网</a>）、中国广电 10099（<a href="https://www.10099.com.cn" target="_blank" rel="noopener noreferrer">中国广电官网</a>）。</li>
+      <li>办卡数量限制：依据工业和信息化部电话用户实名登记管理相关规定（同一运营商名下最多 5 张实名手机卡）。官方来源：<a href="https://www.miit.gov.cn" target="_blank" rel="noopener noreferrer" title="工业和信息化部官网">工业和信息化部官网</a></li>
+      <li>运营商官方客服热线：中国移动 10086（<a href="https://www.10086.cn" target="_blank" rel="noopener noreferrer" title="中国移动官网">中国移动官网</a>）、中国联通 10010（<a href="https://www.10010.com" target="_blank" rel="noopener noreferrer" title="中国联通官网">中国联通官网</a>）、中国电信 10000（<a href="https://www.189.cn" target="_blank" rel="noopener noreferrer" title="中国电信官网">中国电信官网</a>）、中国广电 10099（<a href="https://www.10099.com.cn" target="_blank" rel="noopener noreferrer" title="中国广电官网">中国广电官网</a>）。</li>
       <li>平台资费与套餐：以各号卡平台官方页面实时展示为准，本站不标注具体合约期与资费承诺。</li>
     </ul>
     <blockquote>
@@ -692,6 +699,29 @@ ${proxies}
   <div class="container">
     <h2 id="terms-title">服务条款与免责声明</h2>
     <p>本站仅提供信息导航与比选服务，不直接售卡、不参与交易与物流；各平台名称与商标归其权利人所有。页面展示的资费区间仅供参考，实际套餐、价格与优惠以各平台官方页面实时展示为准。跳转外部平台后，相关服务与责任由对应平台承担。</p>
+  </div>
+</section>
+<section class="faq-section" id="faq" aria-labelledby="faq-title">
+  <div class="container">
+    <h2 id="faq-title">常见问题</h2>
+    <div class="faq">
+      <details class="faq-item">
+        <summary>本站是官方售卡平台吗？</summary>
+        <p>不是。好卡导航是聚合导航站，不直接售卡；点击“前往平台”将跳转至各号卡平台官方入口，选号、实名与付款均在平台内完成。</p>
+      </details>
+      <details class="faq-item">
+        <summary>页面上的资费信息准确吗？</summary>
+        <p>页面资费区间来自各平台公开信息，仅供比选参考；实际套餐、价格与优惠以各平台官方页面实时展示为准。</p>
+      </details>
+      <details class="faq-item">
+        <summary>办卡遇到问题找谁？</summary>
+        <p>售后与订单问题请直接联系您下单的平台在线客服或运营商官方热线（移动 10086、联通 10010、电信 10000、广电 10099）；本站不参与交易与物流。</p>
+      </details>
+      <details class="faq-item">
+        <summary>为什么会通过本站跳转办理？</summary>
+        <p>本站将各平台官方办理入口与代理申请通道集中收录，方便您横向比较资费与覆盖范围后直达官方页面，减少到处搜索的时间成本。</p>
+      </details>
+    </div>
   </div>
 </section>
 <section class="contact-section" id="contact" aria-labelledby="contact-title">
@@ -779,7 +809,7 @@ function renderCardMain(pair, pairs) {
   const relatedItems = related.map((p) => `      <li class="related-card">
         <h3>${escapeHtml(p.card.name)}</h3>
         <p class="related-desc">${escapeHtml(p.card.description)}</p>
-        <a class="related-link" href="${escapeHtml(p.slug)}.html">查看${escapeHtml(p.card.name)}详情 →</a>
+        <a class="related-link" href="${escapeHtml(p.slug)}.html" title="查看${escapeHtml(p.card.name)}详情">查看${escapeHtml(p.card.name)}详情 →</a>
       </li>`).join('\n');
   const relatedSection = related.length > 0
     ? `
@@ -804,8 +834,8 @@ ${relatedItems}
       <li>💳 资费：<strong class="price">${escapeHtml(card.priceRange)}</strong></li>${areaItem}
     </ul>
     <div class="cta-group">
-      <a class="btn btn-primary" href="${escapeHtml(card.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">前往${escapeHtml(card.name)}官方平台 ↗</a>
-      <a class="btn btn-secondary" href="${escapeHtml(proxy.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">申请成为${escapeHtml(card.name)}代理 ↗</a>
+      <a class="btn btn-primary" href="${escapeHtml(card.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer" title="前往${escapeHtml(card.name)}官方平台">前往${escapeHtml(card.name)}官方平台 ↗</a>
+      <a class="btn btn-secondary" href="${escapeHtml(proxy.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer" title="申请成为${escapeHtml(card.name)}代理">申请成为${escapeHtml(card.name)}代理 ↗</a>
     </div>
     <p class="note">跳转至外部平台，本站不直接售卡</p>
   </div>
@@ -839,7 +869,7 @@ ${stepItems}
           <p class="agent-card-name">${escapeHtml(proxy.name)}</p>
           <p class="agent-card-desc">${AGENT_CARD_DESC}</p>
         </div>
-        <a class="btn btn-primary agent-card-cta" href="${escapeHtml(proxy.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer">直达代理申请通道 ↗</a>
+        <a class="btn btn-primary agent-card-cta" href="${escapeHtml(proxy.url)}" target="_blank" rel="sponsored nofollow noopener noreferrer" title="直达代理申请通道">直达代理申请通道 ↗</a>
       </div>
     </section>
     <section class="extra-block">
@@ -869,9 +899,15 @@ function indexJsonLd(pairs) {
         '@type': 'Organization',
         '@id': `${SITE.baseUrl}/#organization`,
         name: SITE.siteName,
+        alternateName: SITE_AUTHOR.alternateName,
         url: `${SITE.baseUrl}/`,
         logo: { '@type': 'ImageObject', url: SITE.baseUrl + SITE.ogImage },
         sameAs: SITE_AUTHOR.sameAs,
+        contactPoint: {
+          '@type': 'ContactPoint',
+          contactType: 'customer support',
+          name: `站长微信：${SITE_AUTHOR.contactWechat}`,
+        },
       },
       {
         '@type': 'WebSite',
@@ -936,9 +972,15 @@ function cardJsonLd(pair) {
         '@type': 'Organization',
         '@id': `${SITE.baseUrl}/#organization`,
         name: SITE.siteName,
+        alternateName: SITE_AUTHOR.alternateName,
         url: `${SITE.baseUrl}/`,
         logo: { '@type': 'ImageObject', url: SITE.baseUrl + SITE.ogImage },
         sameAs: SITE_AUTHOR.sameAs,
+        contactPoint: {
+          '@type': 'ContactPoint',
+          contactType: 'customer support',
+          name: `站长微信：${SITE_AUTHOR.contactWechat}`,
+        },
       },
       {
         '@type': 'WebPage',

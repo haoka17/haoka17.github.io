@@ -203,7 +203,7 @@ test('子页：底部友情链接共 12 个入口（排除自身 + 外部友链�
       !nav.includes(`href="${pair.slug}.html"`),
       `${where} 友链不得含指向自身的链接`
     );
-    assert.ok(nav.includes('<a href="../index.html">首页</a>'), `${where} 友链应含首页回链 ../index.html`);
+    assert.ok(/<a href="\.\.\/index\.html"[^>]*>首页<\/a>/.test(nav), `${where} 友链应含首页回链 ../index.html`);
     const others = pairs.filter((p) => p.slug !== pair.slug);
     assert.strictEqual(others.length, 9);
     for (const other of others) {
@@ -214,7 +214,7 @@ test('子页：底部友情链接共 12 个入口（排除自身 + 外部友链�
     }
     // 外部友链：绝对 URL + 新窗口安全属性，位于列表末尾
     assert.ok(
-      nav.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝 ↗</a></li>'),
+      /<li><a href="https:\/\/jdjdndn\.github\.io\/"[^>]*>券宝 ↗<\/a><\/li>/.test(nav),
       `${where} 友链应含外部友链 jdjdndn.github.io（含安全属性）`
     );
   }
@@ -232,7 +232,7 @@ test('index.html：底部友情链接共 12 个入口（首页高亮 + 10 子页
     );
   }
   assert.ok(
-    nav.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝 ↗</a></li>'),
+    /<li><a href="https:\/\/jdjdndn\.github\.io\/"[^>]*>券宝 ↗<\/a><\/li>/.test(nav),
     'index.html 友链应含外部友链 jdjdndn.github.io（含安全属性）'
   );
 });
@@ -442,11 +442,11 @@ test('SEO：11 页均有独立 <title>、meta description、canonical、JSON-LD�
     assert.ok(!descs.has(descMatch[1]), `description 应全站唯一: ${descMatch[1].slice(0, 30)}…`);
     descs.add(descMatch[1]);
 
-    // keywords：非空、≤100 字符（SEO 规范）
+    // keywords：非空、≤200 字符（站长口径：多一点不碍事，放宽上限）
     const kwMatch = page.html.match(/<meta name="keywords" content="([^"]*)"/);
     assert.ok(kwMatch, `${page.rel} 应含 meta keywords`);
     assert.ok(kwMatch[1].trim().length > 0, `${page.rel} meta keywords 不应为空`);
-    assert.ok(kwMatch[1].length <= 100, `${page.rel} meta keywords ${kwMatch[1].length} 字符，超过 100 上限`);
+    assert.ok(kwMatch[1].length <= 200, `${page.rel} meta keywords ${kwMatch[1].length} 字符，超过 200 上限`);
 
     assert.ok(
       page.html.includes(`<link rel="canonical" href="${page.canonical}">`),

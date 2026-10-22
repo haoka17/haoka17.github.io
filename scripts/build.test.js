@@ -464,14 +464,14 @@ test('renderFooterNav：当前页为 span[aria-current]，其余为 <a>，末尾
   const items = html.match(/<li>/g) || [];
   assert.strictEqual(items.length, 4, '首页 + 每个子页 + 外部友链各一个入口');
   assert.ok(html.includes('<span aria-current="page" class="current">电信星卡</span>'));
-  assert.ok(html.includes('<a href="../index.html">首页</a>'), '子页视角首页入口回链 ../index.html');
+  assert.ok(/<a href="\.\.\/index\.html"[^>]*>首页<\/a>/.test(html), '子页视角首页入口回链 ../index.html');
   assert.ok(html.includes('href="172-haoka.html"'), '子页视角同目录互链 {slug}.html');
   assert.strictEqual((html.match(/aria-current="page"/g) || []).length, 1, 'aria-current 全页唯一');
   assert.ok(!html.includes('href="dianxin-xingka.html"'), '当前页不得出现自链接');
 
-  // 外部友链：绝对 URL + 新窗口安全属性，渲染在列表末尾
+  // 外部友链：绝对 URL + 新窗口安全属性 + title，渲染在列表末尾
   assert.ok(
-     html.includes('<li><a href="https://jdjdndn.github.io/" target="_blank" rel="noopener noreferrer">券宝 ↗</a></li>'),
+     /<li><a href="https:\/\/jdjdndn\.github\.io\/"[^>]*>券宝 ↗<\/a><\/li>/.test(html),
     '末尾应含外部友链 jdjdndn.github.io（含 target=_blank rel=noopener noreferrer）'
   );
   const externalItem = html.indexOf('https://jdjdndn.github.io/');
@@ -565,7 +565,7 @@ test('renderLayout 首页版：资源/互链/favicon 均为站点根相对路径
 
   assert.ok(html.includes('href="assets/css/style.css"'), '首页样式表应为 assets/ 相对路径');
   assert.ok(html.includes('src="assets/js/main.js"'), '首页脚本应为 assets/ 相对路径');
-  assert.ok(html.includes('<a class="logo" href="index.html">'), '首页 logo 应指向 index.html');
+  assert.ok(/<a class="logo" href="index\.html"[^>]*>/.test(html), '首页 logo 应指向 index.html');
   assert.ok(html.includes('href="assets/img/favicon.svg" type="image/svg+xml"'));
   assert.ok(html.includes('href="assets/img/favicon-32.png" type="image/png" sizes="32x32"'));
   assert.ok(html.includes('href="assets/img/favicon-16.png" type="image/png" sizes="16x16"'));
