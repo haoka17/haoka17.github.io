@@ -341,7 +341,7 @@ test('子页结构增强：FAQ 4 个 details 条目；相关推荐 9 个平台�
 /* 2''. 号卡注意事项公告区块（首页 hero 后 / 子页 CTA 后，11 页复用）   */
 /* ================================================================== */
 
-test('注意事项公告：11 页均含 notice-section、6 条固定文案与联系方式 wcbbll', () => {
+test('注意事项公告：11 页均含 notice-section、7 条固定文案与联系方式 wcbbll', () => {
   const allPages = [
     { rel: 'index.html', html: indexHtml },
     ...cardPages.map(({ pair, html }) => ({ rel: `card/${pair.slug}.html`, html })),
