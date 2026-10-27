@@ -341,7 +341,7 @@ test('子页结构增强：FAQ 4 个 details 条目；相关推荐 9 个平台�
 /* 2''. 号卡注意事项公告区块（首页 hero 后 / 子页 CTA 后，11 页复用）   */
 /* ================================================================== */
 
-test('注意事项公告：11 页均含 notice-section、7 条固定文案与联系方式 wcbbll', () => {
+test('注意事项公告：11 页均含 notice-section、8 条须知文案（与号卡系真源逐字对齐）与联系方式 wcbbll', () => {
   const allPages = [
     { rel: 'index.html', html: indexHtml },
     ...cardPages.map(({ pair, html }) => ({ rel: `card/${pair.slug}.html`, html })),
@@ -365,7 +365,7 @@ test('注意事项公告：11 页均含 notice-section、7 条固定文案与联
       `${rel} 应含引导语 notice-lead`
     );
 
-    // 6 条固定文案逐条渲染（事实数字不得改动）
+    // 8 条须知逐条渲染（与号卡系真源逐字对齐，事实数字不得改动）
     const list = section[0].match(/<ol class="notice-list">[\s\S]*?<\/ol>/);
     assert.ok(list, `${rel} 应含 <ol class="notice-list">`);
     const items = Array.from(list[0].matchAll(/<li>([\s\S]*?)<\/li>/g), (m) => m[1]);

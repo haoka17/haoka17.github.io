@@ -27,6 +27,10 @@ const {
   renderIndexMain,
   renderCardMain,
   renderNotice,
+  NOTICE_BOOKMARK_TITLE,
+  NOTICE_BOOKMARK_TEXT,
+  NOTICE_BOOKMARK_DESKTOP,
+  NOTICE_BOOKMARK_MOBILE,
   NOTICE_TITLE,
   NOTICE_LEAD,
   NOTICE_CONTACT,
@@ -271,18 +275,37 @@ test('renderNotice：结构骨架 + 7 条固定文案 + 联系方式；纯静态
   assert.ok(!/(?:href|src)="/.test(html), '公告区块不应含 href/src 引用');
 });
 
-test('NOTICE 常量快照：7 条注意事项文案与事实数字、引导语、联系方式逐字符一致', () => {
+test('NOTICE 收藏提醒：常量逐字符一致 + renderNotice 高亮条位置 + 保持无链接', () => {
+  assert.strictEqual(NOTICE_BOOKMARK_TITLE, '先收藏本站，再办卡');
+  assert.strictEqual(NOTICE_BOOKMARK_TEXT, '办卡入口会随活动上下架，本站地址也可能调整；收藏之后，下次查进度、查订单、找售后直接回来，不怕找不到。');
+  assert.strictEqual(NOTICE_BOOKMARK_DESKTOP, '电脑：按 Ctrl + D 一键收藏');
+  assert.strictEqual(NOTICE_BOOKMARK_MOBILE, '手机：浏览器菜单 →「添加书签」或「添加到主屏幕」');
+  const html = renderNotice();
+  assert.ok(html.includes('<aside class="notice-bookmark" aria-label="收藏本站提醒">'), '应渲染收藏提醒高亮条');
+  const stripPos = html.indexOf('<aside class="notice-bookmark"');
+  const h2Pos = html.indexOf('<h2 id="notice-title">');
+  const listPos = html.indexOf('<ol class="notice-list">');
+  assert.ok(h2Pos > -1 && stripPos > h2Pos && listPos > stripPos, '高亮条应在区块标题之后、须知列表之前（显眼位置）');
+  for (const kw of ['收藏', '下架', '找不到', 'Ctrl + D', '添加到主屏幕']) {
+    assert.ok(html.includes(kw), '收藏提醒应含关键词: ' + kw);
+  }
+  const strip = html.slice(stripPos, html.indexOf('</aside>'));
+  assert.ok(!strip.includes('<a '), '收藏提醒条保持纯静态无链接（区块契约）');
+});
+
+test('NOTICE 常量快照：8 条须知文案（与号卡系真源 CARD_NOTICES 逐字对齐）、引导语、联系方式逐字符一致', () => {
   assert.strictEqual(NOTICE_TITLE, '号卡注意事项');
   assert.strictEqual(NOTICE_LEAD, '下单前请仔细阅读平台详情页，重点关注套餐内容与优惠期。');
   assert.strictEqual(NOTICE_CONTACT, '微信：wcbbll');
   assert.deepStrictEqual(NOTICE_ITEMS, [
-    '根据工信部规定：个人在同一运营商 30 天内只能办理一张卡；同一运营商名下最多可办理 5 张实名制手机卡；四大运营商合计不超过 10 张。',
-    '号卡归属地均为随机分配，不可指定。',
-    '申请时缴纳的费用：申请成功后自动转为话费；申请失败将全额退回。',
-    '请多留意办卡进度；如果申请失败，记得查看失败原因——可能是该卡已下架，也可能是所在地区暂不支持办理，换其他卡重新申请即可。',
-    '一般号卡在 24-48 小时内发货；特殊卡（需上传三证/四证、先激活后发货、预存话费的）审核较慢，一般需要 3-5 天。',
-    '各平台内均有订单查询与在线客服，遇到问题直接联系平台客服即可。请记住下单的平台网站，售后不要走错地方。',
-    '办卡失败可拨打运营商官方客服热线查询：移动 10086、联通 10010、电信 10000、广电 10099，或联系平台在线客服。',
+    '请仔细看套餐详情，尤其注意看套餐优惠期，过了优惠期月费会恢复原价，流量也会恢复。',
+    '根据工信部规定：个人在同一运营商 30 天内只能办理一张；同一运营商名下最多可办理 5 张实名制手机卡；四大运营商合计不超过 10 张。',
+    '号卡归属地均为随机。',
+    '申请时激活的费用，申请成功会转为话费，失败会退回。',
+    '多留意办卡进度；如果申请失败，记得看下失败原因——可能是该卡已下架，也可能你所在地区暂不支持办理，换其他卡重新申请就好。',
+    '一般卡在 24-48 小时内发货；三证/四证、先激活后发货、预存类特殊卡审核较慢，一般需要 3-5 天。',
+    '网站里有订单查询、有客服，如有问题联系客服即可；请记住下单的网站，售后不要走错了地方。',
+    '官方客服热线：移动 10086、联通 10010、电信 10000、广电 10099。',
   ]);
 });
 
